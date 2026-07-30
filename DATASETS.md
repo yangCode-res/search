@@ -46,6 +46,21 @@ AstaBench 最多允许返回 250 篇论文，但排序顺序会影响最终得�
 
 数据、模型权重、缓存和输出均不得提交 Git。
 
+### 当前已准备数据
+
+LitSearch 已在超算完成处理：
+
+```text
+原始查询：597
+检索语料：64,183 篇论文
+训练集：396 queries / 400 listwise examples
+验证集：92 queries / 92 listwise examples
+测试集：109 queries / 111 listwise examples
+Query split 交集：0
+```
+
+原始数据约 1.2GB，处理后数据约 60MB。PaSa 和 AstaBench 官方 Hugging Face 数据仓库需要申请访问权限，当前转换和中转代码已准备好，授权后可直接补充。
+
 ## 4. 统一 Query 数据格式
 
 ```json

@@ -18,6 +18,7 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation", type=int, default=8)
     parser.add_argument("--lora-r", type=int, default=16)
+    parser.add_argument("--deepspeed")
     args = parser.parse_args()
 
     try:
@@ -26,7 +27,7 @@ def main() -> None:
         from transformers import (
             AutoModelForCausalLM,
             AutoTokenizer,
-            DataCollatorForLanguageModeling,
+            DataCollatorForSeq2Seq,
             Trainer,
             TrainingArguments,
         )
@@ -45,18 +46,30 @@ def main() -> None:
     formatter = reranker_messages if args.task == "reranker" else reasoner_messages
 
     def encode(example):
-        text = tokenizer.apply_chat_template(
-            formatter(example), tokenize=False, add_generation_prompt=False
+        messages = formatter(example)
+        prompt = tokenizer.apply_chat_template(
+            messages[:-1], tokenize=False, add_generation_prompt=True
         )
-        return tokenizer(text, truncation=True, max_length=args.max_length)
+        full_text = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=False
+        )
+        prompt_ids = tokenizer(
+            prompt, truncation=True, max_length=args.max_length, add_special_tokens=False
+        )["input_ids"]
+        encoded = tokenizer(
+            full_text, truncation=True, max_length=args.max_length, add_special_tokens=False
+        )
+        response_start = min(len(prompt_ids), len(encoded["input_ids"]))
+        encoded["labels"] = [-100] * response_start + encoded["input_ids"][response_start:]
+        return encoded
 
     tokenized = dataset.map(encode, remove_columns=dataset["train"].column_names)
     model = AutoModelForCausalLM.from_pretrained(
         args.model,
         trust_remote_code=True,
         torch_dtype="auto",
-        device_map="auto",
     )
+    model.config.use_cache = False
     model = get_peft_model(
         model,
         LoraConfig(
@@ -83,13 +96,20 @@ def main() -> None:
         eval_steps=200,
         report_to="none",
         remove_unused_columns=False,
+        deepspeed=args.deepspeed,
+        ddp_find_unused_parameters=False,
     )
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=tokenized["train"],
         eval_dataset=tokenized.get("validation"),
-        data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
+        data_collator=DataCollatorForSeq2Seq(
+            tokenizer=tokenizer,
+            model=model,
+            padding=True,
+            label_pad_token_id=-100,
+        ),
     )
     trainer.train()
     trainer.save_model(args.output)

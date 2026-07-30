@@ -69,12 +69,24 @@ Git 仓库仅保存代码。数据、模型和训练产物统一存放在：
 └── outputs/      # 推理结果、日志和评测报告
 ```
 
-服务器一键准备：
+如果服务器可以直接访问 Hugging Face，可一键准备 PaSa/AstaBench：
 
 ```bash
 cd /file_storage01/home/juanliu/25_ymj/search
 bash scripts/prepare_server_data.sh
 ```
+
+当前超算登录节点不能直接访问 Hugging Face。本项目提供本地临时中转脚本；数据只在临时目录存在，传输成功或失败后都会自动删除：
+
+```bash
+# 公开 LitSearch 查询与标题/摘要语料
+DATASETS=litsearch bash scripts/relay_datasets_to_server.sh
+
+# PaSa/AstaBench 获得 Hugging Face 访问权限后再执行
+DATASETS=pasa,asta bash scripts/relay_datasets_to_server.sh
+```
+
+PaSa 和 AstaBench 的 Hugging Face 仓库当前均为受限访问，需要先在各自数据集页面申请权限。
 
 详细数据设计参见 [DATASETS.md](./DATASETS.md)，整体模型方案参见 [MODEL_DESIGN.md](./MODEL_DESIGN.md)。
 
@@ -125,6 +137,19 @@ python scripts/train_sft.py \
 ```
 
 Reasoner 使用相同入口，将 `--task` 改为 `reasoner` 并传入搜索轨迹数据。
+
+超算训练环境和 Slurm 作业：
+
+```bash
+# 仅需执行一次
+bash scripts/setup_training_env.sh
+
+# 检查脚本和路径后提交
+sbatch scripts/slurm_train_reranker.sh
+sbatch scripts/slurm_train_reasoner.sh
+```
+
+默认使用服务器已有的 `Qwen3-Coder-30B-A3B-Instruct` 和 8 张 GPU，通过 LoRA + DeepSpeed ZeRO-3 训练。正式实验可将 `MODEL_PATH` 替换为更适合相关性判定的 Qwen Instruct/Reranker 权重。
 
 ## 测试
 
