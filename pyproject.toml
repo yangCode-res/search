@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pnsearch"
+version = "0.1.0"
+description = "Positive-negative feedback driven academic paper search"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "PN-Search Team"}]
+dependencies = []
+
+[project.optional-dependencies]
+api = ["fastapi>=0.115", "uvicorn>=0.30"]
+train = [
+  "torch>=2.3",
+  "transformers>=4.48",
+  "datasets>=3.0",
+  "accelerate>=1.0",
+  "peft>=0.13"
+]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.8"]
+
+[project.scripts]
+pnsearch = "pnsearch.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+

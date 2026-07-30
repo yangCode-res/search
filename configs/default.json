@@ -1,0 +1,15 @@
+{
+  "mode": "heuristic",
+  "max_rounds": 3,
+  "max_api_calls": 10,
+  "batch_size": 8,
+  "candidate_limit": 80,
+  "final_limit": 20,
+  "search_sources": ["semantic_scholar", "openalex"],
+  "min_select_score": 0.62,
+  "min_borderline_score": 0.35,
+  "stop_new_select_threshold": 1,
+  "stop_reject_ratio": 0.85,
+  "stop_duplicate_ratio": 0.8
+}
+
