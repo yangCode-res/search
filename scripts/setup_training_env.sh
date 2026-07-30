@@ -5,13 +5,36 @@ DATA_ROOT="${DATA_ROOT:-/file_storage01/home/juanliu/25_ymj/search_data}"
 ENV_ROOT="${ENV_ROOT:-$DATA_ROOT/envs/pnsearch}"
 PROJECT_ROOT="${PROJECT_ROOT:-/file_storage01/home/juanliu/25_ymj/search}"
 
-if ! python3 -m venv "$ENV_ROOT"; then
-  python3 -m pip install --user virtualenv
-  python3 -m virtualenv --clear "$ENV_ROOT"
+if [[ ! -x "$ENV_ROOT/bin/python" ]]; then
+  if ! python3 -m venv "$ENV_ROOT"; then
+    python3 -m pip install --user virtualenv
+    python3 -m virtualenv "$ENV_ROOT"
+  fi
 fi
 source "$ENV_ROOT/bin/activate"
 python -m pip install --upgrade pip setuptools wheel
-python -m pip install torch transformers datasets accelerate peft deepspeed pyarrow
+
+if ! python -c 'import torch' >/dev/null 2>&1; then
+  if [[ "${INSTALL_TORCH:-0}" != "1" ]]; then
+    cat <<'EOF'
+Training environment skeleton created, but PyTorch was not installed.
+GPU access is required to inspect the cluster driver before choosing a CUDA wheel.
+After the account GPU quota is available, rerun with for example:
+
+  INSTALL_TORCH=1 TORCH_INDEX_URL=<cluster-compatible-index> bash scripts/setup_training_env.sh
+
+Do not install the default mirror build blindly: it may pull an incompatible full CUDA runtime.
+EOF
+    exit 0
+  fi
+  if [[ -z "${TORCH_INDEX_URL:-}" ]]; then
+    echo "TORCH_INDEX_URL is required when INSTALL_TORCH=1" >&2
+    exit 2
+  fi
+  python -m pip install torch --index-url "$TORCH_INDEX_URL"
+fi
+
+python -m pip install transformers datasets accelerate peft deepspeed pyarrow
 python -m pip install -e "$PROJECT_ROOT"
 
 python -c 'import torch, transformers, datasets, accelerate, peft, deepspeed; print({"torch": torch.__version__, "transformers": transformers.__version__, "cuda": torch.cuda.is_available(), "gpu_count": torch.cuda.device_count()})'

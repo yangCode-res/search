@@ -78,3 +78,9 @@ bash scripts/setup_training_env.sh
 ```
 
 然后再提交 Reranker 作业。Reasoner 当前数据是确定性 bootstrap 行为，只适合格式和初始 SFT 验证；正式训练前应通过运行系统收集成功的多轮搜索轨迹并替换或增强 bootstrap 数据。
+
+### 当前调度限制
+
+2026-07-30 对 `gre` 和 `dxh` 分区分别申请 1 GPU、4GB 内存、2 分钟只读探测时，Slurm 均返回 `AssocGrpGRES`，说明当前账户/关联组 GPU 配额已被占满或未开放。两个探测作业均已取消，没有遗留排队任务。
+
+因此尚不能确认计算节点 GPU 驱动版本。通用镜像的默认 `torch` 会下载 CUDA 13 全套运行库，已及时终止以避免安装潜在不兼容环境。`setup_training_env.sh` 现在只创建环境骨架；GPU 配额恢复后，应先探测驱动，再通过 `INSTALL_TORCH=1 TORCH_INDEX_URL=...` 明确安装匹配版本。

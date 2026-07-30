@@ -141,8 +141,12 @@ Reasoner 使用相同入口，将 `--task` 改为 `reasoner` 并传入搜索轨�
 超算训练环境和 Slurm 作业：
 
 ```bash
-# 仅需执行一次
+# 首次执行会创建环境骨架；不会盲目安装 CUDA/PyTorch
 bash scripts/setup_training_env.sh
+
+# GPU 配额恢复并确认计算节点驱动后，明确指定兼容 wheel 源
+INSTALL_TORCH=1 TORCH_INDEX_URL='<compatible-pytorch-index>' \
+  bash scripts/setup_training_env.sh
 
 # 检查脚本和路径后提交
 sbatch scripts/slurm_train_reranker.sh

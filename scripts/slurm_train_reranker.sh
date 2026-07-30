@@ -5,7 +5,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=64
-#SBATCH --mem=480G
+#SBATCH --mem=128G
 #SBATCH --time=24:00:00
 #SBATCH --output=/file_storage01/home/juanliu/25_ymj/search_data/outputs/pnsearch-reranker-%j.log
 
@@ -35,4 +35,3 @@ srun torchrun --standalone --nproc_per_node=8 scripts/train_sft.py \
   --batch-size 1 \
   --gradient-accumulation 4 \
   --lora-r 16
-
