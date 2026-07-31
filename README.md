@@ -177,6 +177,13 @@ PYTHONPATH=src python3 scripts/generate_reasoner_trajectories.py \
 LABEL_LIMIT=100 RUN_REASONER=0 bash scripts/run_mimo_teacher_pipeline.sh
 ```
 
+服务器上已配置 Controller 时，推荐提交可追踪日志的 CPU Slurm 作业；作业默认每次断点续跑
+100 个新查询，并把本次 API/Token 成本写入 `pasa_train_mimo.summary.json`：
+
+```bash
+sbatch --export=ALL,LABEL_LIMIT=100,MIMO_CONCURRENCY=2 scripts/slurm_label_mimo.sh
+```
+
 ## 模型训练
 
 ```bash

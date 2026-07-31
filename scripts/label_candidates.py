@@ -96,9 +96,11 @@ async def run(args: argparse.Namespace) -> None:
             )
     if errors:
         write_jsonl(args.output.with_suffix(".errors.jsonl"), errors)
-    print(
-        json.dumps({**stats, "llm_usage": client.usage_snapshot()}, ensure_ascii=False, indent=2)
+    summary = {**stats, "llm_usage": client.usage_snapshot()}
+    args.output.with_suffix(".summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
 
 
 async def label_query(
