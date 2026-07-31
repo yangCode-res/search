@@ -16,6 +16,7 @@ def main() -> None:
     parser.add_argument("--index", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--results-per-query", type=int, default=80)
+    parser.add_argument("--strategy", choices=["broad", "tiered", "hybrid"], default="hybrid")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--inject-gold", action="store_true")
     args = parser.parse_args()
@@ -46,7 +47,9 @@ def main() -> None:
                 for item in query.get("positive_papers") or []
                 if item.get("title")
             }
-            for hit in index.search(query["query"], args.results_per_query):
+            for hit in index.search(
+                query["query"], args.results_per_query, strategy=args.strategy
+            ):
                 title_key = normalize_title(hit.paper.title)
                 if hit.paper.paper_id in seen_ids or title_key in seen_titles:
                     continue

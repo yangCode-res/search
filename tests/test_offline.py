@@ -37,6 +37,10 @@ class OfflineIndexTest(unittest.TestCase):
                 self.assertTrue(hits)
                 self.assertEqual(hits[0].paper.paper_id, "2501.00001")
                 self.assertEqual(index.get_by_id("2501.00002").venue, "CVPR")
+                broad_hits = index.search(
+                    "LLM agent academic paper search", limit=2, strategy="broad"
+                )
+                self.assertEqual(broad_hits[0].paper.paper_id, "2501.00001")
 
     def test_query_removes_generic_words(self):
         expression = fts_query("Which papers are about search agents?")

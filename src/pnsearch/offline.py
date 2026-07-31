@@ -79,7 +79,9 @@ class PasaOfflineIndex:
     def __exit__(self, *_: object) -> None:
         self.close()
 
-    def search(self, query: str, limit: int = 30) -> list[OfflineHit]:
+    def search(
+        self, query: str, limit: int = 30, *, strategy: str = "hybrid"
+    ) -> list[OfflineHit]:
         terms = fts_terms(query)
         if not terms:
             return []
@@ -92,15 +94,32 @@ class PasaOfflineIndex:
             width = min(width, len(ordered_terms))
             if width and width not in widths:
                 widths.append(width)
-        expressions = [
+        tiered_expressions = [
             " AND ".join(f'"{term}"' for term in ordered_terms[:width]) for width in widths
         ]
-        expressions.append(" OR ".join(f'"{term}"' for term in ordered_terms[:8]))
+        broad_expression = " OR ".join(f'"{term}"' for term in terms)
+        if strategy == "tiered":
+            expression_plan = [
+                (expression, limit) for expression in tiered_expressions
+            ] + [
+                (" OR ".join(f'"{term}"' for term in ordered_terms[:8]), limit)
+            ]
+        elif strategy == "broad":
+            expression_plan = [(broad_expression, limit)]
+        elif strategy == "hybrid":
+            tiered_budget = max(1, limit // 2)
+            expression_plan = [
+                (expression, tiered_budget) for expression in tiered_expressions
+            ] + [(broad_expression, limit)]
+        else:
+            raise ValueError(f"unknown offline retrieval strategy: {strategy}")
         hits: list[OfflineHit] = []
         seen: set[str] = set()
-        for tier, expression in enumerate(expressions):
+        for tier, (expression, target_total) in enumerate(expression_plan):
             if len(hits) >= limit:
                 break
+            if len(hits) >= target_total:
+                continue
             rows = self.connection.execute(
                 """
                 SELECT p.paper_id, p.title, p.abstract, p.year, p.venue,
@@ -111,7 +130,7 @@ class PasaOfflineIndex:
                 ORDER BY raw_score
                 LIMIT ?
                 """,
-                (expression, max(limit * 2, 50)),
+                (expression, max((target_total - len(hits)) * 2, 50)),
             ).fetchall()
             for row in rows:
                 paper_id = str(row["paper_id"])
@@ -125,7 +144,7 @@ class PasaOfflineIndex:
                         rank=len(hits) + 1,
                     )
                 )
-                if len(hits) >= limit:
+                if len(hits) >= target_total:
                     break
         return hits
 
