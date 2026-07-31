@@ -16,6 +16,9 @@ DATA_ROOT="${DATA_ROOT:-/file_storage01/home/juanliu/25_ymj/search_data}"
 ENV_ROOT="${ENV_ROOT:-$DATA_ROOT/envs/pnsearch}"
 MODEL_PATH="${MODEL_PATH:-/file_storage01/home/juanliu/25_ymj/model/Qwen3-Coder-30B-A3B-Instruct}"
 MAX_STEPS="${MAX_STEPS:--1}"
+MAX_LENGTH="${MAX_LENGTH:-2048}"
+GRADIENT_ACCUMULATION="${GRADIENT_ACCUMULATION:-4}"
+LOGGING_STEPS="${LOGGING_STEPS:-10}"
 OUTPUT_DIR="${OUTPUT_DIR:-$DATA_ROOT/models/pnsearch-reasoner-lora}"
 NUM_GPUS="${NUM_GPUS:-${SLURM_GPUS_ON_NODE:-8}}"
 
@@ -47,10 +50,11 @@ srun torchrun --standalone --nproc_per_node="$NUM_GPUS" scripts/train_sft.py \
   --validation "$DATA_ROOT/processed/litsearch/reasoner_validation.jsonl" \
   --output "$OUTPUT_DIR" \
   --deepspeed configs/deepspeed_zero3.json \
-  --max-length 2048 \
+  --max-length "$MAX_LENGTH" \
   --epochs 2 \
   --learning-rate 1e-5 \
   --batch-size 1 \
-  --gradient-accumulation 4 \
+  --gradient-accumulation "$GRADIENT_ACCUMULATION" \
   --lora-r 16 \
-  --max-steps "$MAX_STEPS"
+  --max-steps "$MAX_STEPS" \
+  --logging-steps "$LOGGING_STEPS"

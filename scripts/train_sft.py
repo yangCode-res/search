@@ -56,6 +56,7 @@ def main() -> None:
     )
     parser.add_argument("--deepspeed")
     parser.add_argument("--max-steps", type=int, default=-1)
+    parser.add_argument("--logging-steps", type=int, default=10)
     args = parser.parse_args()
 
     try:
@@ -167,7 +168,7 @@ def main() -> None:
         gradient_accumulation_steps=args.gradient_accumulation,
         gradient_checkpointing=True,
         bf16=True,
-        logging_steps=10,
+        logging_steps=args.logging_steps,
         save_strategy="steps",
         save_steps=200,
         eval_strategy="steps" if args.validation else "no",

@@ -86,7 +86,7 @@ LLM_MODEL_URL / LLM_API_KEY / LLM_MODEL_NAME
 ```bash
 sbatch --gres=gpu:4 \
   --cpus-per-task=32 \
-  --export=ALL,NUM_GPUS=4,MAX_STEPS=20,OUTPUT_DIR=/file_storage01/home/juanliu/25_ymj/search_data/models/pnsearch-reranker-smoke \
+  --export=ALL,NUM_GPUS=4,MAX_STEPS=2,MAX_LENGTH=1024,GRADIENT_ACCUMULATION=1,LOGGING_STEPS=1,OUTPUT_DIR=/file_storage01/home/juanliu/25_ymj/search_data/models/pnsearch-reranker-smoke \
   scripts/slurm_train_reranker.sh
 ```
 
