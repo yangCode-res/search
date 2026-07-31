@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 
+from pnsearch.boundary import normalize_evidence_boundary
 from pnsearch.clients.llm import OpenAICompatibleClient
 from pnsearch.schema import DecisionLabel, Paper, PaperJudgment, QuerySpec
 from pnsearch.text import compact, keyword_overlap
@@ -163,6 +164,7 @@ class LLMListwiseReranker(ListwiseReranker):
                 label = DecisionLabel(str(item.get("label", "BORDERLINE")).upper())
             except ValueError:
                 label = DecisionLabel.BORDERLINE
+            label = normalize_evidence_boundary(label, item.get("rationale"))
             relevance_default = {
                 DecisionLabel.SELECT: 0.9,
                 DecisionLabel.BORDERLINE: 0.5,

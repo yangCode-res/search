@@ -8,8 +8,10 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from pnsearch.boundary import normalize_evidence_boundary
 from pnsearch.datasets import iter_json_records, write_jsonl
 from pnsearch.evaluation import normalize_title
+from pnsearch.schema import DecisionLabel
 
 
 def main() -> None:
@@ -23,15 +25,19 @@ def main() -> None:
     rng = random.Random(args.seed)
 
     queries = {str(item["query_id"]): item for item in iter_json_records(args.queries)}
-    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    grouped: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+    stats = defaultdict(int)
     for candidate_path in args.candidates:
         for candidate in iter_json_records(candidate_path):
-            grouped[str(candidate["query_id"])].append(candidate)
+            query_id = str(candidate["query_id"])
+            paper_id = str(candidate.get("paper_id", ""))
+            if paper_id in grouped[query_id]:
+                stats["duplicate_candidates_removed"] += 1
+            grouped[query_id][paper_id] = candidate
 
     examples = []
-    stats = defaultdict(int)
     for query_id, query in queries.items():
-        candidates = grouped.get(query_id, [])
+        candidates = list(grouped.get(query_id, {}).values())
         if not candidates:
             continue
         gold_ids = {
@@ -50,6 +56,12 @@ def main() -> None:
             paper_id = str(candidate.get("paper_id", "")).casefold()
             title_key = normalize_title(candidate.get("title", ""))
             teacher_label = str(candidate.get("teacher_label") or "").upper()
+            try:
+                teacher_label = normalize_evidence_boundary(
+                    DecisionLabel(teacher_label), candidate.get("teacher_rationale")
+                ).value
+            except ValueError:
+                pass
             if paper_id in gold_ids or (title_key and title_key in gold_titles) or teacher_label == "SELECT":
                 candidate["label"] = "SELECT"
                 positives.append(candidate)
