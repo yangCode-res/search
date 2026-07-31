@@ -56,7 +56,6 @@ class OpenAICompatibleClient:
         headers = {}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        data = None
         last_error: Exception | None = None
         for attempt in range(3):
             request_payload = dict(payload)
@@ -78,19 +77,17 @@ class OpenAICompatibleClient:
                     self.prompt_tokens += _safe_int(usage.get("prompt_tokens"))
                     self.completion_tokens += _safe_int(usage.get("completion_tokens"))
                     self.total_tokens += _safe_int(usage.get("total_tokens"))
-                break
+                try:
+                    content = data["choices"][0]["message"]["content"]
+                    return parse_json_object(content)
+                except (KeyError, IndexError, TypeError, LLMResponseError) as exc:
+                    last_error = exc
             except HTTPError as exc:
                 last_error = exc
-                if attempt < 2:
-                    await asyncio.sleep(2**attempt)
-        if data is None:
-            self.failed_requests += 1
-            raise LLMResponseError(f"chat completion failed after retries: {last_error}")
-        try:
-            content = data["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
-            raise LLMResponseError(f"invalid chat response: {data}") from exc
-        return parse_json_object(content)
+            if attempt < 2:
+                await asyncio.sleep(2**attempt)
+        self.failed_requests += 1
+        raise LLMResponseError(f"chat completion failed after retries: {last_error}")
 
 
 def _safe_int(value: Any) -> int:

@@ -6,6 +6,27 @@ from pnsearch.clients.llm import OpenAICompatibleClient
 
 
 class LLMClientUsageTest(unittest.TestCase):
+    def test_retries_non_json_model_output(self):
+        invalid = {
+            "choices": [{"message": {"content": "I cannot return JSON"}}],
+            "usage": {"total_tokens": 4},
+        }
+        valid = {
+            "choices": [{"message": {"content": '{"ok": true}'}}],
+            "usage": {"total_tokens": 6},
+        }
+        client = OpenAICompatibleClient("https://example.test/v1", "secret")
+        mocked = AsyncMock(side_effect=[invalid, valid])
+        with patch("pnsearch.clients.llm.post_json", new=mocked):
+            result = asyncio.run(
+                client.chat_json(model="mimo", system="system", user="user")
+            )
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(client.request_attempts, 2)
+        self.assertEqual(client.successful_requests, 2)
+        self.assertEqual(client.total_tokens, 10)
+
     def test_tracks_controller_token_usage(self):
         response = {
             "choices": [{"message": {"content": '{"ok": true}'}}],
