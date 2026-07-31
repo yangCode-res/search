@@ -88,4 +88,4 @@ sbatch --gres=gpu:4 \
   scripts/slurm_train_reranker.sh
 ```
 
-正式训练前先确认冒烟作业能够完成模型加载、首个反向传播和 adapter 保存。
+脚本默认先将 57 GB 基础模型缓存到计算节点本地 `/tmp`，避免每个分布式 rank 重复从共享盘读取整套权重；可用 `STAGE_MODEL_LOCAL=0` 关闭。正式训练前先确认冒烟作业能够完成模型加载、首个反向传播和 adapter 保存。

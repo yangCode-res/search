@@ -27,9 +27,18 @@ export OMP_NUM_THREADS=8
 export TRITON_CACHE_DIR="/tmp/pnsearch-triton-${SLURM_JOB_ID}"
 mkdir -p "$TRITON_CACHE_DIR"
 
+TRAIN_MODEL_PATH="$MODEL_PATH"
+if [[ "${STAGE_MODEL_LOCAL:-1}" == "1" && -d "$MODEL_PATH" ]]; then
+  LOCAL_MODEL_PATH="${LOCAL_MODEL_PATH:-/tmp/pnsearch-model-$(basename "$MODEL_PATH")}"
+  mkdir -p "$LOCAL_MODEL_PATH"
+  echo "Staging base model once to node-local storage: $LOCAL_MODEL_PATH"
+  flock "$LOCAL_MODEL_PATH.lock" rsync --archive --delete --stats "$MODEL_PATH/" "$LOCAL_MODEL_PATH/"
+  TRAIN_MODEL_PATH="$LOCAL_MODEL_PATH"
+fi
+
 srun torchrun --standalone --nproc_per_node="$NUM_GPUS" scripts/train_sft.py \
   --task reasoner \
-  --model "$MODEL_PATH" \
+  --model "$TRAIN_MODEL_PATH" \
   --train "$DATA_ROOT/processed/litsearch/reasoner_train.jsonl" \
   --validation "$DATA_ROOT/processed/litsearch/reasoner_validation.jsonl" \
   --output "$OUTPUT_DIR" \
