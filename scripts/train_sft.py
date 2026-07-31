@@ -48,6 +48,12 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation", type=int, default=8)
     parser.add_argument("--lora-r", type=int, default=16)
+    parser.add_argument(
+        "--lora-target-modules",
+        nargs="+",
+        default=["q_proj", "k_proj", "v_proj", "o_proj"],
+        help="Explicit Linear module suffixes; attention-only defaults avoid raw MoE expert parameters",
+    )
     parser.add_argument("--deepspeed")
     parser.add_argument("--max-steps", type=int, default=-1)
     args = parser.parse_args()
@@ -144,7 +150,7 @@ def main() -> None:
             r=args.lora_r,
             lora_alpha=args.lora_r * 2,
             lora_dropout=0.05,
-            target_modules="all-linear",
+            target_modules=args.lora_target_modules,
             task_type="CAUSAL_LM",
         ),
     )
