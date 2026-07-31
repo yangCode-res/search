@@ -33,3 +33,6 @@ class TrainingConfigTest(unittest.TestCase):
         self.assertEqual(config["train_micro_batch_size_per_gpu"], 1)
         self.assertEqual(config["gradient_accumulation_steps"], 4)
         self.assertEqual(config["train_batch_size"], 16)
+        load_config = MODULE.model_load_deepspeed_config(config)
+        self.assertEqual(load_config["train_batch_size"], 4)
+        self.assertEqual(config["train_batch_size"], 16)

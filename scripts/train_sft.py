@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,17 @@ def resolve_deepspeed_config(
     config["gradient_accumulation_steps"] = gradient_accumulation
     config["train_batch_size"] = world_size * batch_size * gradient_accumulation
     return config
+
+
+def model_load_deepspeed_config(config: dict) -> dict:
+    result = copy.deepcopy(config)
+    # DeepSpeed communication is not initialized yet inside from_pretrained, so ZeRO Init sees
+    # world_size=1. Trainer installs the true distributed batch configuration afterwards.
+    result["train_batch_size"] = (
+        int(result["train_micro_batch_size_per_gpu"])
+        * int(result["gradient_accumulation_steps"])
+    )
+    return result
 
 
 def main() -> None:
@@ -103,7 +115,9 @@ def main() -> None:
         )
         # Keep this object alive while loading so ZeRO-3 partitions the base model instead of
         # materializing one full 30B copy in every worker's CPU memory.
-        deepspeed_config = HfDeepSpeedConfig(resolved_deepspeed)
+        deepspeed_config = HfDeepSpeedConfig(
+            model_load_deepspeed_config(resolved_deepspeed)
+        )
     model = AutoModelForCausalLM.from_pretrained(
         args.model,
         trust_remote_code=True,
