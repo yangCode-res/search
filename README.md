@@ -65,6 +65,7 @@ Git 仓库仅保存代码。数据、模型和训练产物统一存放在：
 ├── raw/          # PaSa、AstaBench 原始数据
 ├── processed/    # 统一格式 train/validation/test
 ├── candidates/   # API 宽召回候选与教师标注
+├── indexes/      # PaSa 离线论文检索索引
 ├── models/       # 基础模型和 LoRA checkpoint
 └── outputs/      # 推理结果、日志和评测报告
 ```
@@ -121,6 +122,51 @@ python scripts/build_listwise_dataset.py \
   --queries "$DATA_ROOT/processed/queries_train.jsonl" \
   --candidates "$DATA_ROOT/candidates/train_labeled.jsonl" \
   --output "$DATA_ROOT/processed/reranker_train.jsonl"
+```
+
+### PaSa + MiMo 教师数据闭环
+
+系统已有的 MiMo Controller 变量可直接复用：
+
+```bash
+export CL_GISM_CONTROLLER_BASE_URL='.../v1'
+export CL_GISM_CONTROLLER_API_KEY='...'
+export CL_GISM_CONTROLLER_MODEL='mimo-v2.5-pro'
+```
+
+构建离线索引与第一批训练数据：
+
+```bash
+sbatch scripts/slurm_build_pasa_index.sh
+
+PYTHONPATH=src python3 scripts/prepare_pasa_sft.py \
+  --input "$DATA_ROOT/raw/pasa/sft_selector/train.jsonl" \
+  --pointwise-output "$DATA_ROOT/processed/pasa/reranker_pointwise_train.jsonl" \
+  --listwise-output "$DATA_ROOT/processed/pasa/reranker_listwise_train.jsonl"
+
+PYTHONPATH=src python3 scripts/mine_pasa_candidates.py \
+  --queries "$DATA_ROOT/processed/pasa/queries_train.jsonl" \
+  --index "$DATA_ROOT/indexes/pasa.sqlite" \
+  --output "$DATA_ROOT/candidates/pasa_train_raw.jsonl" \
+  --inject-gold --limit 5000
+
+PYTHONPATH=src python3 scripts/label_candidates.py \
+  --queries "$DATA_ROOT/processed/pasa/queries_train.jsonl" \
+  --candidates "$DATA_ROOT/candidates/pasa_train_raw.jsonl" \
+  --output "$DATA_ROOT/candidates/pasa_train_mimo.jsonl" \
+  --limit 100 --concurrency 2 --resume
+
+PYTHONPATH=src python3 scripts/build_listwise_dataset.py \
+  --queries "$DATA_ROOT/processed/pasa/queries_train.jsonl" \
+  --candidates "$DATA_ROOT/candidates/pasa_train_mimo.jsonl" \
+  --output "$DATA_ROOT/processed/pasa/reranker_mimo_train.jsonl"
+
+PYTHONPATH=src python3 scripts/generate_reasoner_trajectories.py \
+  --queries "$DATA_ROOT/processed/pasa/queries_train.jsonl" \
+  --index "$DATA_ROOT/indexes/pasa.sqlite" \
+  --output "$DATA_ROOT/processed/pasa/reasoner_mimo_train.jsonl" \
+  --preferences-output "$DATA_ROOT/processed/pasa/reasoner_mimo_preferences.jsonl" \
+  --teacher llm --limit 100
 ```
 
 ## 模型训练
