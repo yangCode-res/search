@@ -24,7 +24,7 @@ Git 分支为 `main`，远端为 `git@github.com:yangCode-res/search.git`。Git 
 - LitSearch 已生成 Reranker Listwise 和 Reasoner bootstrap 数据；
 - 训练环境已安装，PyTorch 2.13.0+cu130 可识别 NVIDIA A800-SXM4-80GB；
 - 本地单元测试共 14 项通过；
-- 4 GPU、Qwen3-Coder-30B-A3B-Instruct、LoRA + DeepSpeed ZeRO-3 冒烟训练正在验证。
+- 4 GPU、Qwen3-Coder-30B-A3B-Instruct、LoRA + DeepSpeed ZeRO-3 冒烟训练已完整通过。
 
 ## 关键数据文件
 
@@ -93,3 +93,18 @@ sbatch --gres=gpu:4 \
 脚本默认先将 57 GB 基础模型缓存到计算节点本地 `/tmp`，避免每个分布式 rank 重复从共享盘读取整套权重；可用 `STAGE_MODEL_LOCAL=0` 关闭。LoRA 默认只注入 `q_proj/k_proj/v_proj/o_proj`，避免 PEFT 的 `all-linear` 错误包装 Qwen3-MoE 的三维专家参数。正式训练前先确认冒烟作业能够完成模型加载、首个反向传播和 adapter 保存。
 
 `setup_training_env.sh` 还会将登录节点的 Python 开发头文件复制到共享环境；GPU 节点首次运行 Triton CUDA helper 时通过 `C_INCLUDE_PATH` 使用它们，避免计算节点缺少 `Python.h`。
+
+### 冒烟训练结果
+
+Slurm 作业 `51015` 使用 4×A800、`max_length=1024`、梯度累积 1，完成 2 个 optimizer steps 并正常退出：
+
+```text
+elapsed: 00:04:43
+step losses: 0.9657, 1.799
+train loss: 1.382
+eval loss: 1.553
+adapter: search_data/models/pnsearch-reranker-smoke-4gpu-v7/adapter_model.safetensors
+adapter size: 53,528,920 bytes
+```
+
+该结果验证了数据编码、ZeRO-3 分片加载、Qwen3-MoE LoRA 注入、Triton 编译、前向/反向传播、验证和 adapter 保存的完整链路。正式训练应恢复 `max_length=4096` 与梯度累积 4。
