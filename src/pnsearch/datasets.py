@@ -64,7 +64,7 @@ def load_pasa(root: str | Path) -> list[BenchmarkQuery]:
             query = _first_text(item, "query", "question", "instruction", "prompt")
             if not query:
                 continue
-            positives = _normalize_positive_papers(
+            positive_values = (
                 item.get("answer")
                 or item.get("answers")
                 or item.get("relevant_papers")
@@ -72,7 +72,18 @@ def load_pasa(root: str | Path) -> list[BenchmarkQuery]:
                 or item.get("positive")
                 or []
             )
-            query_id = str(item.get("query_id") or item.get("id") or f"{source}_{index}")
+            positives = _normalize_positive_papers(positive_values)
+            arxiv_ids = item.get("answer_arxiv_id") or []
+            if isinstance(arxiv_ids, list):
+                for positive, arxiv_id in zip(positives, arxiv_ids):
+                    if arxiv_id and not positive["paper_id"]:
+                        positive["paper_id"] = str(arxiv_id)
+            query_id = str(
+                item.get("query_id")
+                or item.get("qid")
+                or item.get("id")
+                or f"{source}_{split}_{index}"
+            )
             records.append(
                 BenchmarkQuery(
                     query_id=query_id,
@@ -181,4 +192,3 @@ def _normalize_positive_papers(values: Any) -> list[dict[str, str]]:
                 }
             )
     return [item for item in result if item["paper_id"] or item["title"]]
-
