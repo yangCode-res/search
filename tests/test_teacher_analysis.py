@@ -26,6 +26,7 @@ class TeacherAnalysisTest(unittest.TestCase):
                     "paper_id": "p2",
                     "teacher_label": "REJECT",
                     "gold_match": True,
+                    "teacher_rationale": "The abstract does not mention the required method.",
                 },
             ]
             path.write_text(
@@ -35,3 +36,4 @@ class TeacherAnalysisTest(unittest.TestCase):
 
         self.assertEqual(report["duplicate_rows"], 1)
         self.assertEqual(report["gold_reject_rate"], 1.0)
+        self.assertEqual(report["normalized_gold_reject_rate"], 0.0)

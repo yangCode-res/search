@@ -202,6 +202,15 @@ PYTHONPATH=src python scripts/analyze_teacher_labels.py \
   --output "$DATA_ROOT/outputs/mimo_teacher_comparison.json"
 ```
 
+可以用 Slurm 依赖将质量审计和小规模 Reasoner 轨迹串起来。审计的归一化 Gold 误拒率高于
+10% 时会返回非零状态，Reasoner 作业不会启动：
+
+```bash
+AUDIT_JOB=$(sbatch --parsable --dependency=afterok:$LABEL_JOB scripts/slurm_audit_mimo.sh)
+sbatch --dependency=afterok:$AUDIT_JOB \
+  --export=ALL,REASONER_LIMIT=5 scripts/slurm_generate_reasoner_mimo.sh
+```
+
 ## 模型训练
 
 ```bash

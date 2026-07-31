@@ -7,7 +7,9 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from pnsearch.boundary import normalize_evidence_boundary
 from pnsearch.datasets import iter_json_records
+from pnsearch.schema import DecisionLabel
 
 
 def analyze(path: Path) -> dict[str, Any]:
@@ -20,6 +22,17 @@ def analyze(path: Path) -> dict[str, Any]:
     labels = Counter(str(item.get("teacher_label", "UNKNOWN")) for item in records)
     gold = [item for item in records if item.get("gold_match") or item.get("gold_injected")]
     gold_labels = Counter(str(item.get("teacher_label", "UNKNOWN")) for item in gold)
+    normalized_labels = Counter()
+    normalized_gold_labels = Counter()
+    for item in records:
+        try:
+            label = DecisionLabel(str(item.get("teacher_label", "")).upper())
+        except ValueError:
+            continue
+        normalized = normalize_evidence_boundary(label, item.get("teacher_rationale"))
+        normalized_labels[normalized.value] += 1
+        if item.get("gold_match") or item.get("gold_injected"):
+            normalized_gold_labels[normalized.value] += 1
     total = len(records)
     gold_total = len(gold)
     return {
@@ -36,6 +49,13 @@ def analyze(path: Path) -> dict[str, Any]:
         "gold_labels": dict(gold_labels),
         "gold_reject_rate": (
             round(gold_labels["REJECT"] / gold_total, 6) if gold_total else None
+        ),
+        "normalized_labels": dict(normalized_labels),
+        "normalized_gold_labels": dict(normalized_gold_labels),
+        "normalized_gold_reject_rate": (
+            round(normalized_gold_labels["REJECT"] / gold_total, 6)
+            if gold_total
+            else None
         ),
         "teacher_models": sorted(
             {str(item["teacher_model"]) for item in records if item.get("teacher_model")}
@@ -54,13 +74,33 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Audit MiMo teacher label quality")
     parser.add_argument("--input", type=Path, action="append", required=True)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--max-normalized-gold-reject-rate", type=float)
     args = parser.parse_args()
-    report = {"datasets": [analyze(path) for path in args.input]}
+    datasets = [analyze(path) for path in args.input]
+    violations = []
+    if args.max_normalized_gold_reject_rate is not None:
+        violations = [
+            item["path"]
+            for item in datasets
+            if item["normalized_gold_reject_rate"] is not None
+            and item["normalized_gold_reject_rate"]
+            > args.max_normalized_gold_reject_rate
+        ]
+    report = {
+        "datasets": datasets,
+        "quality_gate": {
+            "max_normalized_gold_reject_rate": args.max_normalized_gold_reject_rate,
+            "passed": not violations,
+            "violations": violations,
+        },
+    }
     rendered = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(rendered, encoding="utf-8")
     print(rendered, end="")
+    if violations:
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":
