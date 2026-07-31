@@ -2,6 +2,7 @@ import unittest
 
 from pnsearch.models.reranker import HeuristicListwiseReranker
 from pnsearch.schema import Criterion, DecisionLabel, Paper, QuerySpec
+from pnsearch.training.formatting import reranker_messages
 
 
 class RerankerTest(unittest.IsolatedAsyncioTestCase):
@@ -32,3 +33,18 @@ class RerankerTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(labels["good"], DecisionLabel.SELECT)
         self.assertEqual(labels["bad"], DecisionLabel.REJECT)
 
+    async def test_training_format_compacts_long_abstracts(self):
+        messages = reranker_messages(
+            {
+                "query": "academic search agents",
+                "candidates": [
+                    {
+                        "paper_id": "p1",
+                        "title": "Paper",
+                        "abstract": "a" * 5000,
+                        "label": "SELECT",
+                    }
+                ],
+            }
+        )
+        self.assertLess(len(messages[1]["content"]), 2500)

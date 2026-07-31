@@ -9,8 +9,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="LoRA SFT for PN-Search reasoner or reranker")
     parser.add_argument("--task", choices=["reasoner", "reranker"], required=True)
     parser.add_argument("--model", required=True)
-    parser.add_argument("--train", required=True)
-    parser.add_argument("--validation")
+    parser.add_argument("--train", action="append", required=True)
+    parser.add_argument("--validation", action="append")
     parser.add_argument("--output", required=True)
     parser.add_argument("--max-length", type=int, default=8192)
     parser.add_argument("--epochs", type=float, default=1.0)
@@ -19,6 +19,7 @@ def main() -> None:
     parser.add_argument("--gradient-accumulation", type=int, default=8)
     parser.add_argument("--lora-r", type=int, default=16)
     parser.add_argument("--deepspeed")
+    parser.add_argument("--max-steps", type=int, default=-1)
     args = parser.parse_args()
 
     try:
@@ -53,15 +54,26 @@ def main() -> None:
         full_text = tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=False
         )
-        prompt_ids = tokenizer(
-            prompt, truncation=True, max_length=args.max_length, add_special_tokens=False
-        )["input_ids"]
-        encoded = tokenizer(
-            full_text, truncation=True, max_length=args.max_length, add_special_tokens=False
-        )
-        response_start = min(len(prompt_ids), len(encoded["input_ids"]))
-        encoded["labels"] = [-100] * response_start + encoded["input_ids"][response_start:]
-        return encoded
+        prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
+        full_ids = tokenizer(full_text, add_special_tokens=False)["input_ids"]
+        response_ids = full_ids[len(prompt_ids) :]
+        if not response_ids:
+            raise ValueError("chat template produced an empty supervised response")
+        response_ids = response_ids[: args.max_length]
+        prompt_budget = max(0, args.max_length - len(response_ids))
+        if len(prompt_ids) > prompt_budget:
+            # Preserve the system/query prefix and the most recent candidates/history suffix.
+            prefix_size = min(prompt_budget // 3, len(prompt_ids))
+            suffix_size = prompt_budget - prefix_size
+            prompt_ids = prompt_ids[:prefix_size] + (
+                prompt_ids[-suffix_size:] if suffix_size else []
+            )
+        input_ids = prompt_ids + response_ids
+        return {
+            "input_ids": input_ids,
+            "attention_mask": [1] * len(input_ids),
+            "labels": [-100] * len(prompt_ids) + response_ids,
+        }
 
     tokenized = dataset.map(encode, remove_columns=dataset["train"].column_names)
     model = AutoModelForCausalLM.from_pretrained(
@@ -83,6 +95,7 @@ def main() -> None:
     training_args = TrainingArguments(
         output_dir=args.output,
         num_train_epochs=args.epochs,
+        max_steps=args.max_steps,
         learning_rate=args.learning_rate,
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,

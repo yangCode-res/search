@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from pnsearch.text import compact
+
 
 RERANKER_SYSTEM = (
     "你是双边界学术论文 Listwise Reranker。根据查询和规则，将论文分为 SELECT、BORDERLINE、REJECT，"
@@ -20,7 +22,13 @@ def reranker_messages(example: dict[str, Any]) -> list[dict[str, str]]:
         "query": example["query"],
         "criteria": example.get("criteria") or {},
         "candidates": [
-            {key: item.get(key) for key in ("paper_id", "title", "abstract", "year", "venue")}
+            {
+                "paper_id": item.get("paper_id"),
+                "title": item.get("title"),
+                "abstract": compact(str(item.get("abstract") or ""), 1800),
+                "year": item.get("year"),
+                "venue": item.get("venue"),
+            }
             for item in example["candidates"]
         ],
     }
@@ -57,4 +65,3 @@ def reasoner_messages(example: dict[str, Any]) -> list[dict[str, str]]:
         {"role": "user", "content": json.dumps(user, ensure_ascii=False)},
         {"role": "assistant", "content": json.dumps(assistant, ensure_ascii=False)},
     ]
-

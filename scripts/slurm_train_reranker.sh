@@ -15,6 +15,7 @@ PROJECT_ROOT="${PROJECT_ROOT:-/file_storage01/home/juanliu/25_ymj/search}"
 DATA_ROOT="${DATA_ROOT:-/file_storage01/home/juanliu/25_ymj/search_data}"
 ENV_ROOT="${ENV_ROOT:-$DATA_ROOT/envs/pnsearch}"
 MODEL_PATH="${MODEL_PATH:-/file_storage01/home/juanliu/25_ymj/model/Qwen3-Coder-30B-A3B-Instruct}"
+MAX_STEPS="${MAX_STEPS:--1}"
 
 cd "$PROJECT_ROOT"
 source "$ENV_ROOT/bin/activate"
@@ -25,7 +26,10 @@ export OMP_NUM_THREADS=8
 srun torchrun --standalone --nproc_per_node=8 scripts/train_sft.py \
   --task reranker \
   --model "$MODEL_PATH" \
+  --train "$DATA_ROOT/processed/pasa/reranker_pointwise_train.jsonl" \
+  --train "$DATA_ROOT/processed/pasa/reranker_listwise_train.jsonl" \
   --train "$DATA_ROOT/processed/litsearch/reranker_train.jsonl" \
+  --validation "$DATA_ROOT/processed/pasa/reranker_pointwise_validation.jsonl" \
   --validation "$DATA_ROOT/processed/litsearch/reranker_validation.jsonl" \
   --output "$DATA_ROOT/models/pnsearch-reranker-lora" \
   --deepspeed configs/deepspeed_zero3.json \
@@ -34,4 +38,5 @@ srun torchrun --standalone --nproc_per_node=8 scripts/train_sft.py \
   --learning-rate 1e-5 \
   --batch-size 1 \
   --gradient-accumulation 4 \
-  --lora-r 16
+  --lora-r 16 \
+  --max-steps "$MAX_STEPS"
