@@ -126,7 +126,8 @@ python scripts/build_listwise_dataset.py \
 
 ### PaSa + MiMo 教师数据闭环
 
-系统已有的 MiMo Controller 变量可直接复用：
+MiMo 使用 OpenAI-compatible API。系统 Controller 变量可直接复用；代码也兼容
+`LLM_MODEL_URL`、`LLM_API_KEY`、`LLM_MODEL_NAME`。凭据只通过环境变量注入，不提交到 Git：
 
 ```bash
 export CL_GISM_CONTROLLER_BASE_URL='.../v1'
@@ -144,15 +145,15 @@ PYTHONPATH=src python3 scripts/prepare_pasa_sft.py \
   --pointwise-output "$DATA_ROOT/processed/pasa/reranker_pointwise_train.jsonl" \
   --listwise-output "$DATA_ROOT/processed/pasa/reranker_listwise_train.jsonl"
 
-PYTHONPATH=src python3 scripts/mine_pasa_candidates.py \
-  --queries "$DATA_ROOT/processed/pasa/queries_train.jsonl" \
-  --index "$DATA_ROOT/indexes/pasa.sqlite" \
-  --output "$DATA_ROOT/candidates/pasa_train_raw.jsonl" \
-  --inject-gold --limit 5000
+sbatch scripts/slurm_mine_pasa_candidates.sh
 
 PYTHONPATH=src python3 scripts/label_candidates.py \
   --queries "$DATA_ROOT/processed/pasa/queries_train.jsonl" \
-  --candidates "$DATA_ROOT/candidates/pasa_train_raw.jsonl" \
+  --candidates "$DATA_ROOT/candidates/pasa_train_shards/raw_0.jsonl" \
+  --candidates "$DATA_ROOT/candidates/pasa_train_shards/raw_1.jsonl" \
+  --candidates "$DATA_ROOT/candidates/pasa_train_shards/raw_2.jsonl" \
+  --candidates "$DATA_ROOT/candidates/pasa_train_shards/raw_3.jsonl" \
+  --candidates "$DATA_ROOT/candidates/pasa_train_shards/raw_4.jsonl" \
   --output "$DATA_ROOT/candidates/pasa_train_mimo.jsonl" \
   --limit 100 --concurrency 2 --resume
 
@@ -166,7 +167,14 @@ PYTHONPATH=src python3 scripts/generate_reasoner_trajectories.py \
   --index "$DATA_ROOT/indexes/pasa.sqlite" \
   --output "$DATA_ROOT/processed/pasa/reasoner_mimo_train.jsonl" \
   --preferences-output "$DATA_ROOT/processed/pasa/reasoner_mimo_preferences.jsonl" \
-  --teacher llm --limit 100
+  --teacher llm --limit 100 --resume
+```
+
+也可以使用可恢复的教师流水线。默认先标注 100 个查询作为成本和格式校验；确认质量后再逐步提高
+`LABEL_LIMIT`。设置 `RUN_REASONER=1` 才会额外生成多轮搜索轨迹：
+
+```bash
+LABEL_LIMIT=100 RUN_REASONER=0 bash scripts/run_mimo_teacher_pipeline.sh
 ```
 
 ## 模型训练

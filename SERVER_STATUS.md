@@ -1,6 +1,6 @@
 # 超算部署状态
 
-更新时间：2026-07-30
+更新时间：2026-07-31
 
 ## 路径
 
@@ -8,79 +8,84 @@
 代码：/file_storage01/home/juanliu/25_ymj/search
 数据：/file_storage01/home/juanliu/25_ymj/search_data
 基础模型：/file_storage01/home/juanliu/25_ymj/model
+Python 环境：/file_storage01/home/juanliu/25_ymj/search_data/envs/pnsearch
 ```
 
-Git 分支为 `main`，远端为 `git@github.com:yangCode-res/search.git`。
+Git 分支为 `main`，远端为 `git@github.com:yangCode-res/search.git`。Git 仅同步代码；数据、索引、模型和日志只保存在超算。
 
 ## 已完成
 
-- 本地和超算代码通过 Git 同步；
-- LitSearch 官方 GitHub 代码在 `search_data/raw/litsearch`；
-- LitSearch Query/Corpus Parquet 在 `search_data/raw/litsearch-data`；
-- 597 条 Query 和 64,183 篇标题/摘要语料已处理；
-- train/validation/test query_id 无交集；
-- Reranker Listwise 数据和 Reasoner bootstrap 数据已生成；
-- 本地和超算均通过 5 个单元测试；
-- Slurm 训练脚本使用 `gre` 分区、单节点 8 GPU、LoRA + DeepSpeed ZeRO-3。
+- PaSa、AstaBench、LitSearch 原始数据已下载到超算；
+- PaSa 已规范化为 train 33,551、validation 1,000、test 1,050 条查询；
+- AstaBench 已规范化为 validation 66、test 267 条查询；
+- PaSa 论文库已构建 SQLite FTS 索引：555,197 篇去重论文，索引约 1.3 GB；
+- PaSa Selector 官方 SFT 已转换为 19,826 条 pointwise 样本和 5,530 条 listwise 训练样本；
+- 前 5,000 条 PaSa 训练查询已完成宽召回，得到 249,193 个 query-paper 候选，保存为 5 个分片；
+- LitSearch 已生成 Reranker Listwise 和 Reasoner bootstrap 数据；
+- 训练环境已安装，PyTorch 2.13.0+cu130 可识别 NVIDIA A800-SXM4-80GB；
+- 本地单元测试共 14 项通过；
+- 4 GPU、Qwen3-Coder-30B-A3B-Instruct、LoRA + DeepSpeed ZeRO-3 冒烟训练正在验证。
 
-## 数据文件
+## 关键数据文件
 
 ```text
-search_data/processed/litsearch/
-├── queries_train.jsonl
-├── queries_validation.jsonl
-├── queries_test.jsonl
-├── candidates_train.jsonl
-├── candidates_validation.jsonl
-├── candidates_test.jsonl
-├── reranker_train.jsonl
-├── reranker_validation.jsonl
-├── reranker_test.jsonl
-├── reasoner_train.jsonl
-├── reasoner_validation.jsonl
-├── reasoner_test.jsonl
-└── litsearch_manifest.json
+search_data/
+├── raw/
+│   ├── pasa/
+│   ├── asta-bench/
+│   └── litsearch-data/
+├── indexes/
+│   └── pasa.sqlite
+├── candidates/
+│   └── pasa_train_shards/
+│       ├── raw_0.jsonl
+│       ├── raw_1.jsonl
+│       ├── raw_2.jsonl
+│       ├── raw_3.jsonl
+│       └── raw_4.jsonl
+└── processed/
+    ├── pasa/
+    └── litsearch/
 ```
 
-## 数据统计
+候选分片行数分别为 49,868、49,943、49,847、49,799、49,736，共 249,193 行。
 
-| Split | Queries | Listwise examples | SELECT positions | REJECT positions |
-|---|---:|---:|---:|---:|
-| Train | 396 | 400 | 425 | 2,775 |
-| Validation | 92 | 92 | 94 | 642 |
-| Test | 109 | 111 | 120 | 768 |
+## 下一阶段
 
-## 尚需外部授权
+1. 使用 MiMo 对候选池做 listwise 教师标注，输出 SELECT、BORDERLINE、REJECT 以及证据；
+2. 将教师标签与 PaSa gold 合并，生成正式 Reranker listwise 数据；
+3. 运行 Reasoner 多轮检索，收集搜索动作、边际召回奖励和偏好对；
+4. 先完成小步数冒烟训练，再提交完整 Reranker SFT；
+5. 用微调后的 Reranker 重放轨迹，继续训练 Reasoner；
+6. 在 PaSa、LitSearch、AstaBench 上评测 F1、Recall@K、API/Token 成本与延迟。
 
-以下 Hugging Face 数据仓库返回 HTTP 403，需账号申请访问后提供 Token：
+## MiMo 配置边界
 
-- `CarlanLark/pasa-dataset`
-- `allenai/asta-bench`
+代码支持以下环境变量，按顺序读取：
 
-不能把没有出现在 open-world gold 中的论文直接当负例。PaSa/AstaBench 获得授权后，应使用其已知正例、relevance criteria 和教师模型证据判定构造难负例。
+```text
+PNSEARCH_LLM_*
+CL_GISM_CONTROLLER_*
+LLM_MODEL_URL / LLM_API_KEY / LLM_MODEL_NAME
+```
 
-## 训练前检查
+凭据不要提交到 Git。若凭据位于其他项目的 `.env`，应由用户明确授权复用，或将相应变量安全地导出到当前作业环境后再运行标注脚本。
 
-服务器当前已有：
+## GPU 训练
+
+服务器当前可见 8 张 NVIDIA A800-SXM4-80GB。基础模型为：
 
 ```text
 /file_storage01/home/juanliu/25_ymj/model/Qwen3-Coder-30B-A3B-Instruct
-/file_storage01/home/juanliu/25_ymj/model/Qwen3.6-27B
 ```
 
-默认训练配置选择前者，因为它是 `Qwen3MoeForCausalLM`，与当前 SFT 入口兼容。`Qwen3.6-27B` 是 `Qwen3_5ForConditionalGeneration`，不能直接交给当前 `AutoModelForCausalLM` 入口。
-
-在提交训练作业前需要执行：
+默认脚本申请 8 卡；配额不足时可以覆盖 Slurm 资源并让脚本使用 4 卡：
 
 ```bash
-cd /file_storage01/home/juanliu/25_ymj/search
-bash scripts/setup_training_env.sh
+sbatch --gres=gpu:4 \
+  --cpus-per-task=32 \
+  --export=ALL,NUM_GPUS=4,MAX_STEPS=20,OUTPUT_DIR=/file_storage01/home/juanliu/25_ymj/search_data/models/pnsearch-reranker-smoke \
+  scripts/slurm_train_reranker.sh
 ```
 
-然后再提交 Reranker 作业。Reasoner 当前数据是确定性 bootstrap 行为，只适合格式和初始 SFT 验证；正式训练前应通过运行系统收集成功的多轮搜索轨迹并替换或增强 bootstrap 数据。
-
-### 当前调度限制
-
-2026-07-30 对 `gre` 和 `dxh` 分区分别申请 1 GPU、4GB 内存、2 分钟只读探测时，Slurm 均返回 `AssocGrpGRES`，说明当前账户/关联组 GPU 配额已被占满或未开放。两个探测作业均已取消，没有遗留排队任务。
-
-因此尚不能确认计算节点 GPU 驱动版本。通用镜像的默认 `torch` 会下载 CUDA 13 全套运行库，已及时终止以避免安装潜在不兼容环境。`setup_training_env.sh` 现在只创建环境骨架；GPU 配额恢复后，应先探测驱动，再通过 `INSTALL_TORCH=1 TORCH_INDEX_URL=...` 明确安装匹配版本。
+正式训练前先确认冒烟作业能够完成模型加载、首个反向传播和 adapter 保存。

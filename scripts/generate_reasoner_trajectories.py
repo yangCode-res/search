@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from contextlib import ExitStack
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -11,7 +12,7 @@ from typing import Any
 from pnsearch.candidate import coarse_rank, merge_candidates
 from pnsearch.clients.llm import OpenAICompatibleClient
 from pnsearch.config import Settings
-from pnsearch.datasets import iter_json_records, write_jsonl
+from pnsearch.datasets import iter_json_records
 from pnsearch.evaluation import normalize_title
 from pnsearch.feedback import analyze_feedback
 from pnsearch.models.analyzer import HeuristicQueryAnalyzer, LLMQueryAnalyzer
@@ -54,46 +55,76 @@ async def run(args: argparse.Namespace) -> None:
         reranker = heuristic_reranker
 
     search_client = PasaOfflineSearchClient(args.index)
-    examples: list[dict[str, Any]] = []
-    preferences: list[dict[str, Any]] = []
-    errors: list[dict[str, str]] = []
-    stats = {"queries": 0, "rounds": 0, "positive_reward_rounds": 0, "errors": 0}
+    completed: set[str] = set()
+    if args.resume and args.output.exists():
+        completed = {str(item["query_id"]) for item in iter_json_records(args.output)}
+    for path in (args.output, args.preferences_output, args.output.with_suffix(".errors.jsonl")):
+        if path:
+            path.parent.mkdir(parents=True, exist_ok=True)
+
+    mode = "a" if args.resume else "w"
+    stats = {
+        "existing_queries": len(completed),
+        "queries": 0,
+        "rounds": 0,
+        "positive_reward_rounds": 0,
+        "errors": 0,
+    }
+    attempted = 0
     try:
-        for record in iter_json_records(args.queries):
-            if args.limit is not None and stats["queries"] >= args.limit:
-                break
-            query_id = str(record["query_id"])
-            try:
-                query_examples, query_preferences = await generate_query_trajectory(
-                    record,
-                    analyzer=analyzer,
-                    reasoner=reasoner,
-                    reranker=reranker,
-                    search_client=search_client,
-                    max_rounds=args.max_rounds,
-                    max_calls=args.max_calls,
-                    candidate_limit=args.candidate_limit,
-                    results_per_action=args.results_per_action,
-                )
-                examples.extend(query_examples)
-                preferences.extend(query_preferences)
-                stats["queries"] += 1
-                stats["rounds"] += sum(not item["stop"] for item in query_examples)
-                stats["positive_reward_rounds"] += sum(
-                    float(item.get("reward") or 0) > 0 for item in query_examples
-                )
-            except Exception as exc:  # one failed teacher call must not lose the full run
-                errors.append({"query_id": query_id, "error": f"{type(exc).__name__}: {exc}"})
-                stats["errors"] += 1
-            if (stats["queries"] + stats["errors"]) % 10 == 0:
-                print(json.dumps(stats, ensure_ascii=False), flush=True)
+        with ExitStack() as stack:
+            output_handle = stack.enter_context(args.output.open(mode, encoding="utf-8"))
+            preferences_handle = (
+                stack.enter_context(args.preferences_output.open(mode, encoding="utf-8"))
+                if args.preferences_output
+                else None
+            )
+            errors_handle = stack.enter_context(
+                args.output.with_suffix(".errors.jsonl").open(mode, encoding="utf-8")
+            )
+            for record in iter_json_records(args.queries):
+                query_id = str(record["query_id"])
+                if query_id in completed:
+                    continue
+                if args.limit is not None and attempted >= args.limit:
+                    break
+                attempted += 1
+                try:
+                    query_examples, query_preferences = await generate_query_trajectory(
+                        record,
+                        analyzer=analyzer,
+                        reasoner=reasoner,
+                        reranker=reranker,
+                        search_client=search_client,
+                        max_rounds=args.max_rounds,
+                        max_calls=args.max_calls,
+                        candidate_limit=args.candidate_limit,
+                        results_per_action=args.results_per_action,
+                    )
+                    for item in query_examples:
+                        output_handle.write(json.dumps(item, ensure_ascii=False) + "\n")
+                    output_handle.flush()
+                    if preferences_handle:
+                        for item in query_preferences:
+                            preferences_handle.write(json.dumps(item, ensure_ascii=False) + "\n")
+                        preferences_handle.flush()
+                    stats["queries"] += 1
+                    stats["rounds"] += sum(not item["stop"] for item in query_examples)
+                    stats["positive_reward_rounds"] += sum(
+                        float(item.get("reward") or 0) > 0 for item in query_examples
+                    )
+                except Exception as exc:  # one failed teacher call must not lose the full run
+                    error = {
+                        "query_id": query_id,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                    errors_handle.write(json.dumps(error, ensure_ascii=False) + "\n")
+                    errors_handle.flush()
+                    stats["errors"] += 1
+                if attempted % 10 == 0:
+                    print(json.dumps(stats, ensure_ascii=False), flush=True)
     finally:
         search_client.close()
-    write_jsonl(args.output, examples)
-    if args.preferences_output:
-        write_jsonl(args.preferences_output, preferences)
-    if errors:
-        write_jsonl(args.output.with_suffix(".errors.jsonl"), errors)
     print(json.dumps(stats, ensure_ascii=False, indent=2))
 
 
@@ -308,6 +339,7 @@ def main() -> None:
     parser.add_argument("--results-per-action", type=int, default=30)
     parser.add_argument("--reranker-batch-size", type=int, default=8)
     parser.add_argument("--timeout", type=float, default=180.0)
+    parser.add_argument("--resume", action="store_true")
     asyncio.run(run(parser.parse_args()))
 
 
