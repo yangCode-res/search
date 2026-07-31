@@ -51,10 +51,10 @@ class Settings:
             "user_agent": "PNSEARCH_USER_AGENT",
         }
         controller_fallbacks = {
-            "llm_base_url": "CL_GISM_CONTROLLER_BASE_URL",
-            "llm_api_key": "CL_GISM_CONTROLLER_API_KEY",
-            "reasoner_model": "CL_GISM_CONTROLLER_MODEL",
-            "reranker_model": "CL_GISM_CONTROLLER_MODEL",
+            "llm_base_url": ("CL_GISM_CONTROLLER_BASE_URL", "LLM_MODEL_URL"),
+            "llm_api_key": ("CL_GISM_CONTROLLER_API_KEY", "LLM_API_KEY"),
+            "reasoner_model": ("CL_GISM_CONTROLLER_MODEL", "LLM_MODEL_NAME"),
+            "reranker_model": ("CL_GISM_CONTROLLER_MODEL", "LLM_MODEL_NAME"),
         }
         type_map = {item.name: item.type for item in fields(cls)}
         for key, env_name in env_map.items():
@@ -65,12 +65,14 @@ class Settings:
                 values[key] = int(raw)
             else:
                 values[key] = raw
-        for key, env_name in controller_fallbacks.items():
+        for key, env_names in controller_fallbacks.items():
             if key in values or os.getenv(env_map[key]) is not None:
                 continue
-            raw = os.getenv(env_name)
-            if raw is not None:
-                values[key] = raw
+            for env_name in env_names:
+                raw = os.getenv(env_name)
+                if raw is not None:
+                    values[key] = raw
+                    break
         if "search_sources" in values:
             values["search_sources"] = tuple(values["search_sources"])
         allowed = set(type_map)

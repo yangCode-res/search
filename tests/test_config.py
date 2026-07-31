@@ -31,3 +31,15 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(settings.llm_base_url, "https://pnsearch.example/v1")
         self.assertEqual(settings.reasoner_model, "reasoner")
         self.assertEqual(settings.reranker_model, "mimo-v2.5-pro")
+
+    def test_existing_llm_environment_is_supported(self):
+        environment = {
+            "LLM_MODEL_URL": "https://existing.example/v1",
+            "LLM_API_KEY": "secret",
+            "LLM_MODEL_NAME": "mimo-v2.5-pro",
+        }
+        with patch.dict(os.environ, environment, clear=True):
+            settings = Settings.from_env()
+        self.assertEqual(settings.llm_base_url, "https://existing.example/v1")
+        self.assertEqual(settings.llm_api_key, "secret")
+        self.assertEqual(settings.reasoner_model, "mimo-v2.5-pro")

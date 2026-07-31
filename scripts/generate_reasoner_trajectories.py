@@ -209,7 +209,13 @@ async def generate_query_trajectory(
             }
         )
         examples.append(before)
-        if actions:
+        if actions and reward > 0:
+            if round_index == 1:
+                rejected_query = "machine learning research papers"
+                rejected_purpose = "overly broad query that ignores the user's constraints"
+            else:
+                rejected_query = state.history[0].actions[0].query
+                rejected_purpose = "repeat a previous query without using new feedback"
             preferences.append(
                 {
                     "query_id": query_id,
@@ -221,9 +227,9 @@ async def generate_query_trajectory(
                     "rejected": [
                         {
                             "type": "KEYWORD_SEARCH",
-                            "query": actions[0].query,
+                            "query": rejected_query,
                             "source": "pasa_offline",
-                            "purpose": "repeat an already used query without feedback",
+                            "purpose": rejected_purpose,
                             "max_results": actions[0].max_results,
                             "feedback_source": "negative_synthetic",
                         }
