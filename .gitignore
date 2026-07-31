@@ -4,10 +4,10 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+*.egg-info/
 .env
 outputs/
 checkpoints/
 data/cache/
 *.log
 .DS_Store
-
