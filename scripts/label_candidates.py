@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import fcntl
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -18,6 +19,12 @@ from pnsearch.schema import Criterion, Paper
 
 async def run(args: argparse.Namespace) -> None:
     settings = Settings.from_env(args.config)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    lock_handle = args.output.with_suffix(args.output.suffix + ".lock").open("w")
+    try:
+        fcntl.flock(lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as exc:
+        raise SystemExit(f"another labeling process is already writing {args.output}") from exc
     queries = {str(item["query_id"]): item for item in iter_json_records(args.queries)}
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for candidate_path in args.candidates:
@@ -27,7 +34,8 @@ async def run(args: argparse.Namespace) -> None:
     completed: set[str] = set()
     existing_count = 0
     if args.resume and args.output.exists():
-        for item in iter_json_records(args.output):
+        existing = _deduplicate_output(args.output)
+        for item in existing:
             completed.add(str(item["query_id"]))
             existing_count += 1
     else:
@@ -101,6 +109,22 @@ async def run(args: argparse.Namespace) -> None:
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    fcntl.flock(lock_handle, fcntl.LOCK_UN)
+    lock_handle.close()
+
+
+def _deduplicate_output(path: Path) -> list[dict[str, Any]]:
+    records: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in iter_json_records(path):
+        key = (str(item.get("query_id", "")), str(item.get("paper_id", "")))
+        records[key] = item
+    unique = list(records.values())
+    original_lines = sum(1 for _ in path.open(encoding="utf-8"))
+    if len(unique) != original_lines:
+        temporary = path.with_suffix(path.suffix + ".deduplicating")
+        write_jsonl(temporary, unique)
+        temporary.replace(path)
+    return unique
 
 
 async def label_query(
