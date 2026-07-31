@@ -50,6 +50,12 @@ class Settings:
             "semantic_scholar_api_key": "SEMANTIC_SCHOLAR_API_KEY",
             "user_agent": "PNSEARCH_USER_AGENT",
         }
+        controller_fallbacks = {
+            "llm_base_url": "CL_GISM_CONTROLLER_BASE_URL",
+            "llm_api_key": "CL_GISM_CONTROLLER_API_KEY",
+            "reasoner_model": "CL_GISM_CONTROLLER_MODEL",
+            "reranker_model": "CL_GISM_CONTROLLER_MODEL",
+        }
         type_map = {item.name: item.type for item in fields(cls)}
         for key, env_name in env_map.items():
             raw = os.getenv(env_name)
@@ -59,8 +65,13 @@ class Settings:
                 values[key] = int(raw)
             else:
                 values[key] = raw
+        for key, env_name in controller_fallbacks.items():
+            if key in values or os.getenv(env_map[key]) is not None:
+                continue
+            raw = os.getenv(env_name)
+            if raw is not None:
+                values[key] = raw
         if "search_sources" in values:
             values["search_sources"] = tuple(values["search_sources"])
         allowed = set(type_map)
         return cls(**{key: value for key, value in values.items() if key in allowed})
-

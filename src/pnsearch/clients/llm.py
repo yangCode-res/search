@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from typing import Any
 
-from .http import post_json
+from .http import HTTPError, post_json
 
 
 class LLMResponseError(RuntimeError):
@@ -39,12 +40,28 @@ class OpenAICompatibleClient:
         headers = {}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        data = await post_json(
-            f"{self.base_url}/chat/completions",
-            payload,
-            headers=headers,
-            timeout=self.timeout,
-        )
+        data = None
+        last_error: Exception | None = None
+        for attempt in range(3):
+            request_payload = dict(payload)
+            if attempt == 2:
+                # Some OpenAI-compatible controllers enforce JSON through the prompt but do not
+                # implement response_format. The final retry keeps interoperability with them.
+                request_payload.pop("response_format", None)
+            try:
+                data = await post_json(
+                    f"{self.base_url}/chat/completions",
+                    request_payload,
+                    headers=headers,
+                    timeout=self.timeout,
+                )
+                break
+            except HTTPError as exc:
+                last_error = exc
+                if attempt < 2:
+                    await asyncio.sleep(2**attempt)
+        if data is None:
+            raise LLMResponseError(f"chat completion failed after retries: {last_error}")
         try:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
