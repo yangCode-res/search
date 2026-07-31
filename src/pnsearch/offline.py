@@ -46,6 +46,10 @@ def fallback_paper_id(title: str) -> str:
 
 
 def fts_query(text: str, max_terms: int = 18) -> str:
+    return " OR ".join(f'"{term}"' for term in fts_terms(text, max_terms=max_terms))
+
+
+def fts_terms(text: str, max_terms: int = 18) -> list[str]:
     terms: list[str] = []
     seen: set[str] = set()
     for token in _TOKEN_RE.findall(text):
@@ -56,7 +60,7 @@ def fts_query(text: str, max_terms: int = 18) -> str:
         terms.append(token)
         if len(terms) >= max_terms:
             break
-    return " OR ".join(f'"{term}"' for term in terms)
+    return terms
 
 
 class PasaOfflineIndex:
@@ -76,29 +80,54 @@ class PasaOfflineIndex:
         self.close()
 
     def search(self, query: str, limit: int = 30) -> list[OfflineHit]:
-        expression = fts_query(query)
-        if not expression:
+        terms = fts_terms(query)
+        if not terms:
             return []
-        rows = self.connection.execute(
-            """
-            SELECT p.paper_id, p.title, p.abstract, p.year, p.venue,
-                   bm25(papers_fts, 6.0, 1.0) AS raw_score
-            FROM papers_fts
-            JOIN papers AS p ON p.rowid = papers_fts.rowid
-            WHERE papers_fts MATCH ?
-            ORDER BY raw_score
-            LIMIT ?
-            """,
-            (expression, limit),
-        ).fetchall()
-        return [
-            OfflineHit(
-                paper=_row_to_paper(row, retrieved_by=[query]),
-                score=-float(row["raw_score"]),
-                rank=rank,
-            )
-            for rank, row in enumerate(rows, start=1)
+        # Long, specific terms are a useful cheap proxy for IDF. Start strict for speed and
+        # progressively relax until the requested breadth is reached.
+        informative = sorted(enumerate(terms), key=lambda item: (-len(item[1]), item[0]))
+        ordered_terms = [item[1] for item in informative]
+        widths = []
+        for width in (6, 4, 2):
+            width = min(width, len(ordered_terms))
+            if width and width not in widths:
+                widths.append(width)
+        expressions = [
+            " AND ".join(f'"{term}"' for term in ordered_terms[:width]) for width in widths
         ]
+        expressions.append(" OR ".join(f'"{term}"' for term in ordered_terms[:8]))
+        hits: list[OfflineHit] = []
+        seen: set[str] = set()
+        for tier, expression in enumerate(expressions):
+            if len(hits) >= limit:
+                break
+            rows = self.connection.execute(
+                """
+                SELECT p.paper_id, p.title, p.abstract, p.year, p.venue,
+                       bm25(papers_fts, 6.0, 1.0) AS raw_score
+                FROM papers_fts
+                JOIN papers AS p ON p.rowid = papers_fts.rowid
+                WHERE papers_fts MATCH ?
+                ORDER BY raw_score
+                LIMIT ?
+                """,
+                (expression, max(limit * 2, 50)),
+            ).fetchall()
+            for row in rows:
+                paper_id = str(row["paper_id"])
+                if paper_id in seen:
+                    continue
+                seen.add(paper_id)
+                hits.append(
+                    OfflineHit(
+                        paper=_row_to_paper(row, retrieved_by=[query]),
+                        score=100.0 - tier * 10.0 - float(row["raw_score"]),
+                        rank=len(hits) + 1,
+                    )
+                )
+                if len(hits) >= limit:
+                    break
+        return hits
 
     def get_by_id(self, paper_id: str) -> Paper | None:
         row = self.connection.execute(

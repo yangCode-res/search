@@ -21,7 +21,13 @@ def main() -> None:
     args = parser.parse_args()
 
     output = []
-    stats = {"queries": 0, "candidates": 0, "gold_injected": 0, "gold_missing": 0}
+    stats = {
+        "queries": 0,
+        "candidates": 0,
+        "gold_retrieved": 0,
+        "gold_injected": 0,
+        "gold_missing": 0,
+    }
     with PasaOfflineIndex(args.index) as index:
         for query in iter_json_records(args.queries):
             if args.limit is not None and stats["queries"] >= args.limit:
@@ -30,28 +36,44 @@ def main() -> None:
             candidates = []
             seen_ids: set[str] = set()
             seen_titles: set[str] = set()
-            if args.inject_gold:
-                for gold in query.get("positive_papers") or []:
-                    paper = None
-                    if gold.get("paper_id"):
-                        paper = index.get_by_id(str(gold["paper_id"]))
-                    if paper is None and gold.get("title"):
-                        paper = index.get_by_title(str(gold["title"]))
-                    if paper is None:
-                        stats["gold_missing"] += 1
-                        continue
-                    candidates.append((paper, 1_000_000.0, 0, True))
-                    seen_ids.add(paper.paper_id)
-                    seen_titles.add(normalize_title(paper.title))
-                    stats["gold_injected"] += 1
+            gold_ids = {
+                str(item.get("paper_id") or "").casefold()
+                for item in query.get("positive_papers") or []
+                if item.get("paper_id")
+            }
+            gold_titles = {
+                normalize_title(str(item.get("title") or ""))
+                for item in query.get("positive_papers") or []
+                if item.get("title")
+            }
             for hit in index.search(query["query"], args.results_per_query):
                 title_key = normalize_title(hit.paper.title)
                 if hit.paper.paper_id in seen_ids or title_key in seen_titles:
                     continue
                 seen_ids.add(hit.paper.paper_id)
                 seen_titles.add(title_key)
-                candidates.append((hit.paper, hit.score, hit.rank, False))
-            for paper, score, rank, is_gold in candidates:
+                natural_gold = (
+                    hit.paper.paper_id.casefold() in gold_ids or title_key in gold_titles
+                )
+                candidates.append((hit.paper, hit.score, hit.rank, natural_gold, False))
+                stats["gold_retrieved"] += int(natural_gold)
+            if args.inject_gold:
+                for gold in query.get("positive_papers") or []:
+                    gold_id = str(gold.get("paper_id") or "")
+                    gold_title = normalize_title(str(gold.get("title") or ""))
+                    if gold_id in seen_ids or (gold_title and gold_title in seen_titles):
+                        continue
+                    paper = index.get_by_id(gold_id) if gold_id else None
+                    if paper is None and gold.get("title"):
+                        paper = index.get_by_title(str(gold["title"]))
+                    if paper is None:
+                        stats["gold_missing"] += 1
+                        continue
+                    candidates.append((paper, 1_000_000.0, 0, True, True))
+                    seen_ids.add(paper.paper_id)
+                    seen_titles.add(normalize_title(paper.title))
+                    stats["gold_injected"] += 1
+            for paper, score, rank, gold_match, gold_injected in candidates:
                 output.append(
                     {
                         "query_id": query_id,
@@ -63,7 +85,8 @@ def main() -> None:
                         "source": "pasa_offline",
                         "retrieval_score": score,
                         "retrieval_rank": rank,
-                        "gold_injected": is_gold,
+                        "gold_match": gold_match,
+                        "gold_injected": gold_injected,
                     }
                 )
             stats["queries"] += 1
