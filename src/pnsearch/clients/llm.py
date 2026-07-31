@@ -17,6 +17,22 @@ class OpenAICompatibleClient:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
+        self.request_attempts = 0
+        self.successful_requests = 0
+        self.failed_requests = 0
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.total_tokens = 0
+
+    def usage_snapshot(self) -> dict[str, int]:
+        return {
+            "request_attempts": self.request_attempts,
+            "successful_requests": self.successful_requests,
+            "failed_requests": self.failed_requests,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.total_tokens,
+        }
 
     async def chat_json(
         self,
@@ -49,24 +65,39 @@ class OpenAICompatibleClient:
                 # implement response_format. The final retry keeps interoperability with them.
                 request_payload.pop("response_format", None)
             try:
+                self.request_attempts += 1
                 data = await post_json(
                     f"{self.base_url}/chat/completions",
                     request_payload,
                     headers=headers,
                     timeout=self.timeout,
                 )
+                self.successful_requests += 1
+                usage = data.get("usage") if isinstance(data, dict) else None
+                if isinstance(usage, dict):
+                    self.prompt_tokens += _safe_int(usage.get("prompt_tokens"))
+                    self.completion_tokens += _safe_int(usage.get("completion_tokens"))
+                    self.total_tokens += _safe_int(usage.get("total_tokens"))
                 break
             except HTTPError as exc:
                 last_error = exc
                 if attempt < 2:
                     await asyncio.sleep(2**attempt)
         if data is None:
+            self.failed_requests += 1
             raise LLMResponseError(f"chat completion failed after retries: {last_error}")
         try:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMResponseError(f"invalid chat response: {data}") from exc
         return parse_json_object(content)
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def parse_json_object(content: str | dict[str, Any]) -> dict[str, Any]:

@@ -89,10 +89,15 @@ async def run(args: argparse.Namespace) -> None:
                 output_handle.flush()
                 stats["completed_queries"] += 1
                 stats["labeled_papers"] += len(labeled)
-            print(json.dumps(stats, ensure_ascii=False), flush=True)
+            print(
+                json.dumps({**stats, "llm_usage": client.usage_snapshot()}, ensure_ascii=False),
+                flush=True,
+            )
     if errors:
         write_jsonl(args.output.with_suffix(".errors.jsonl"), errors)
-    print(json.dumps(stats, ensure_ascii=False, indent=2))
+    print(
+        json.dumps({**stats, "llm_usage": client.usage_snapshot()}, ensure_ascii=False, indent=2)
+    )
 
 
 async def label_query(

@@ -122,10 +122,15 @@ async def run(args: argparse.Namespace) -> None:
                     errors_handle.flush()
                     stats["errors"] += 1
                 if attempted % 10 == 0:
-                    print(json.dumps(stats, ensure_ascii=False), flush=True)
+                    print(
+                        json.dumps(
+                            {**stats, "llm_usage": llm.usage_snapshot()}, ensure_ascii=False
+                        ),
+                        flush=True,
+                    )
     finally:
         search_client.close()
-    print(json.dumps(stats, ensure_ascii=False, indent=2))
+    print(json.dumps({**stats, "llm_usage": llm.usage_snapshot()}, ensure_ascii=False, indent=2))
 
 
 async def generate_query_trajectory(
