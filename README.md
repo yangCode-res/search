@@ -193,6 +193,15 @@ MIMO_LISTWISE_OUTPUT="$DATA_ROOT/processed/pasa/reranker_mimo_v2_train.jsonl" \
 scripts/slurm_label_mimo.sh
 ```
 
+标注完成后比较不同教师版本的 Gold 误拒率和标签分布：
+
+```bash
+PYTHONPATH=src python scripts/analyze_teacher_labels.py \
+  --input "$DATA_ROOT/candidates/pasa_train_mimo.jsonl" \
+  --input "$DATA_ROOT/candidates/pasa_train_mimo_v2.jsonl" \
+  --output "$DATA_ROOT/outputs/mimo_teacher_comparison.json"
+```
+
 ## 模型训练
 
 ```bash
