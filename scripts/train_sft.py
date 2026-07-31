@@ -76,10 +76,18 @@ def main() -> None:
         }
 
     tokenized = dataset.map(encode, remove_columns=dataset["train"].column_names)
+    deepspeed_config = None
+    if args.deepspeed:
+        from transformers.integrations import HfDeepSpeedConfig
+
+        # Keep this object alive while loading so ZeRO-3 partitions the base model instead of
+        # materializing one full 30B copy in every worker's CPU memory.
+        deepspeed_config = HfDeepSpeedConfig(args.deepspeed)
     model = AutoModelForCausalLM.from_pretrained(
         args.model,
         trust_remote_code=True,
         torch_dtype="auto",
+        low_cpu_mem_usage=True,
     )
     model.config.use_cache = False
     model = get_peft_model(
@@ -127,6 +135,7 @@ def main() -> None:
     trainer.train()
     trainer.save_model(args.output)
     tokenizer.save_pretrained(args.output)
+    _ = deepspeed_config
 
 
 if __name__ == "__main__":
