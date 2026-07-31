@@ -15,7 +15,7 @@ from pnsearch.evaluation import normalize_title
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build query-grouped listwise reranker examples")
     parser.add_argument("--queries", type=Path, required=True)
-    parser.add_argument("--candidates", type=Path, required=True)
+    parser.add_argument("--candidates", type=Path, action="append", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--list-size", type=int, default=8)
     parser.add_argument("--seed", type=int, default=42)
@@ -24,8 +24,9 @@ def main() -> None:
 
     queries = {str(item["query_id"]): item for item in iter_json_records(args.queries)}
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for candidate in iter_json_records(args.candidates):
-        grouped[str(candidate["query_id"])].append(candidate)
+    for candidate_path in args.candidates:
+        for candidate in iter_json_records(candidate_path):
+            grouped[str(candidate["query_id"])].append(candidate)
 
     examples = []
     stats = defaultdict(int)
@@ -112,4 +113,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

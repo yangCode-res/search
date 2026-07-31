@@ -20,8 +20,9 @@ async def run(args: argparse.Namespace) -> None:
     settings = Settings.from_env(args.config)
     queries = {str(item["query_id"]): item for item in iter_json_records(args.queries)}
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for item in iter_json_records(args.candidates):
-        grouped[str(item["query_id"])].append(item)
+    for candidate_path in args.candidates:
+        for item in iter_json_records(candidate_path):
+            grouped[str(item["query_id"])].append(item)
 
     completed: set[str] = set()
     existing_count = 0
@@ -149,7 +150,7 @@ async def label_query(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Teacher-label mined paper candidates")
     parser.add_argument("--queries", type=Path, required=True)
-    parser.add_argument("--candidates", type=Path, required=True)
+    parser.add_argument("--candidates", type=Path, action="append", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--config", type=Path, default=Path("configs/default.json"))
     parser.add_argument("--limit", type=int)

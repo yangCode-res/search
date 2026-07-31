@@ -18,6 +18,7 @@ def main() -> None:
     parser.add_argument("--results-per-query", type=int, default=80)
     parser.add_argument("--strategy", choices=["broad", "tiered", "hybrid"], default="broad")
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--start", type=int, default=0)
     parser.add_argument("--inject-gold", action="store_true")
     args = parser.parse_args()
 
@@ -30,7 +31,9 @@ def main() -> None:
         "gold_missing": 0,
     }
     with PasaOfflineIndex(args.index) as index:
-        for query in iter_json_records(args.queries):
+        for input_index, query in enumerate(iter_json_records(args.queries)):
+            if input_index < args.start:
+                continue
             if args.limit is not None and stats["queries"] >= args.limit:
                 break
             query_id = str(query["query_id"])
