@@ -101,12 +101,20 @@ async def run(args: argparse.Namespace) -> None:
                         candidate_limit=args.candidate_limit,
                         results_per_action=args.results_per_action,
                     )
-                    for item in query_examples:
-                        output_handle.write(json.dumps(item, ensure_ascii=False) + "\n")
+                    output_handle.write(
+                        "".join(
+                            json.dumps(item, ensure_ascii=False) + "\n"
+                            for item in query_examples
+                        )
+                    )
                     output_handle.flush()
                     if preferences_handle:
-                        for item in query_preferences:
-                            preferences_handle.write(json.dumps(item, ensure_ascii=False) + "\n")
+                        preferences_handle.write(
+                            "".join(
+                                json.dumps(item, ensure_ascii=False) + "\n"
+                                for item in query_preferences
+                            )
+                        )
                         preferences_handle.flush()
                     stats["queries"] += 1
                     stats["rounds"] += sum(not item["stop"] for item in query_examples)

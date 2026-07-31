@@ -84,8 +84,9 @@ async def run(args: argparse.Namespace) -> None:
                     errors.append({"query_id": query_id, "error": error})
                     stats["errors"] += 1
                     continue
-                for item in labeled:
-                    output_handle.write(json.dumps(item, ensure_ascii=False) + "\n")
+                output_handle.write(
+                    "".join(json.dumps(item, ensure_ascii=False) + "\n" for item in labeled)
+                )
                 output_handle.flush()
                 stats["completed_queries"] += 1
                 stats["labeled_papers"] += len(labeled)
