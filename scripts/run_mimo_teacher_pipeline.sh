@@ -7,6 +7,8 @@ PYTHON="${PYTHON:-$DATA_ROOT/envs/pnsearch/bin/python}"
 LABEL_LIMIT="${LABEL_LIMIT:-100}"
 REASONER_LIMIT="${REASONER_LIMIT:-20}"
 RUN_REASONER="${RUN_REASONER:-0}"
+MIMO_OUTPUT="${MIMO_OUTPUT:-$DATA_ROOT/candidates/pasa_train_mimo.jsonl}"
+MIMO_LISTWISE_OUTPUT="${MIMO_LISTWISE_OUTPUT:-$DATA_ROOT/processed/pasa/reranker_mimo_train.jsonl}"
 
 cd "$PROJECT_ROOT"
 if [[ -f "$PROJECT_ROOT/.env" ]]; then
@@ -35,7 +37,7 @@ fi
 "$PYTHON" scripts/label_candidates.py \
   --queries "$DATA_ROOT/processed/pasa/queries_train.jsonl" \
   "${CANDIDATE_ARGS[@]}" \
-  --output "$DATA_ROOT/candidates/pasa_train_mimo.jsonl" \
+  --output "$MIMO_OUTPUT" \
   --limit "$LABEL_LIMIT" \
   --concurrency "${MIMO_CONCURRENCY:-2}" \
   --max-candidates-per-query "${MIMO_CANDIDATES_PER_QUERY:-48}" \
@@ -44,8 +46,8 @@ fi
 
 "$PYTHON" scripts/build_listwise_dataset.py \
   --queries "$DATA_ROOT/processed/pasa/queries_train.jsonl" \
-  --candidates "$DATA_ROOT/candidates/pasa_train_mimo.jsonl" \
-  --output "$DATA_ROOT/processed/pasa/reranker_mimo_train.jsonl"
+  --candidates "$MIMO_OUTPUT" \
+  --output "$MIMO_LISTWISE_OUTPUT"
 
 if [[ "$RUN_REASONER" == "1" ]]; then
   "$PYTHON" scripts/generate_reasoner_trajectories.py \

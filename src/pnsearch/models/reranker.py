@@ -7,6 +7,8 @@ from pnsearch.clients.llm import OpenAICompatibleClient
 from pnsearch.schema import DecisionLabel, Paper, PaperJudgment, QuerySpec
 from pnsearch.text import compact, keyword_overlap
 
+RERANKER_PROMPT_VERSION = "dual-boundary-v2"
+
 
 class ListwiseReranker(ABC):
     @abstractmethod
@@ -139,6 +141,8 @@ class LLMListwiseReranker(ListwiseReranker):
             system=(
                 "你是双边界学术论文 Listwise Reranker。只输出 JSON。必须比较整组论文，并逐项检查纳入和排除条件。"
                 "SELECT 仅用于摘要有明确证据满足所有必需条件的论文；证据不足用 BORDERLINE；明确不符用 REJECT。"
+                "如果论文总体主题匹配，但摘要没有明确提及查询要求的某个方法、数据或细节，必须判为 BORDERLINE，"
+                "不能仅凭摘要未提及就判为 REJECT。REJECT 只用于摘要明确显示任务、领域或方法不符，或者论文显然无关。"
                 "不要因关键词相似而选择论文，不要假设摘要中未陈述的信息。"
             ),
             user=(

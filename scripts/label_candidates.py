@@ -13,7 +13,7 @@ from pnsearch.clients.llm import OpenAICompatibleClient
 from pnsearch.config import Settings
 from pnsearch.datasets import iter_json_records, write_jsonl
 from pnsearch.models.analyzer import HeuristicQueryAnalyzer
-from pnsearch.models.reranker import LLMListwiseReranker
+from pnsearch.models.reranker import LLMListwiseReranker, RERANKER_PROMPT_VERSION
 from pnsearch.schema import Criterion, Paper
 
 
@@ -174,6 +174,8 @@ async def label_query(
                 },
                 "reason_codes": judgment.reason_codes,
                 "teacher_rationale": judgment.rationale,
+                "teacher_model": reranker.model,
+                "teacher_prompt_version": RERANKER_PROMPT_VERSION,
             }
         )
     return labeled

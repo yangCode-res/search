@@ -184,6 +184,15 @@ LABEL_LIMIT=100 RUN_REASONER=0 bash scripts/run_mimo_teacher_pipeline.sh
 sbatch --export=ALL,LABEL_LIMIT=100,MIMO_CONCURRENCY=2 scripts/slurm_label_mimo.sh
 ```
 
+做教师提示词消融时应使用独立输出，避免不同版本标签混在一起：
+
+```bash
+sbatch --export=ALL,LABEL_LIMIT=20,MIMO_CONCURRENCY=2,\
+MIMO_OUTPUT="$DATA_ROOT/candidates/pasa_train_mimo_v2.jsonl",\
+MIMO_LISTWISE_OUTPUT="$DATA_ROOT/processed/pasa/reranker_mimo_v2_train.jsonl" \
+scripts/slurm_label_mimo.sh
+```
+
 ## 模型训练
 
 ```bash
