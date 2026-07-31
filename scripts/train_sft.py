@@ -2,7 +2,20 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 from pathlib import Path
+
+
+def resolve_deepspeed_config(
+    path: str | Path, *, batch_size: int, gradient_accumulation: int, world_size: int
+) -> dict:
+    with Path(path).open(encoding="utf-8") as handle:
+        config = json.load(handle)
+    config["train_micro_batch_size_per_gpu"] = batch_size
+    config["gradient_accumulation_steps"] = gradient_accumulation
+    config["train_batch_size"] = world_size * batch_size * gradient_accumulation
+    return config
 
 
 def main() -> None:
@@ -77,12 +90,20 @@ def main() -> None:
 
     tokenized = dataset.map(encode, remove_columns=dataset["train"].column_names)
     deepspeed_config = None
+    resolved_deepspeed = args.deepspeed
     if args.deepspeed:
         from transformers.integrations import HfDeepSpeedConfig
 
+        world_size = int(os.environ.get("WORLD_SIZE", "1"))
+        resolved_deepspeed = resolve_deepspeed_config(
+            args.deepspeed,
+            batch_size=args.batch_size,
+            gradient_accumulation=args.gradient_accumulation,
+            world_size=world_size,
+        )
         # Keep this object alive while loading so ZeRO-3 partitions the base model instead of
         # materializing one full 30B copy in every worker's CPU memory.
-        deepspeed_config = HfDeepSpeedConfig(args.deepspeed)
+        deepspeed_config = HfDeepSpeedConfig(resolved_deepspeed)
     model = AutoModelForCausalLM.from_pretrained(
         args.model,
         trust_remote_code=True,
@@ -117,7 +138,7 @@ def main() -> None:
         eval_steps=200,
         report_to="none",
         remove_unused_columns=False,
-        deepspeed=args.deepspeed,
+        deepspeed=resolved_deepspeed,
         ddp_find_unused_parameters=False,
     )
     trainer = Trainer(
