@@ -108,3 +108,22 @@ adapter size: 53,528,920 bytes
 ```
 
 该结果验证了数据编码、ZeRO-3 分片加载、Qwen3-MoE LoRA 注入、Triton 编译、前向/反向传播、验证和 adapter 保存的完整链路。正式训练应恢复 `max_length=4096` 与梯度累积 4。
+
+## MiMo v2 教师标注试验
+
+`mimo-v2.5-pro` 的双边界 v2 提示词已完成 20 个 PaSa 查询的小批试验，并补跑了两条格式/网络失败记录：
+
+```text
+queries: 20/20
+candidate labels: 960
+raw labels: SELECT 316 / BORDERLINE 311 / REJECT 333
+normalized labels: SELECT 316 / BORDERLINE 367 / REJECT 277
+known gold: SELECT 7 / BORDERLINE 2 / REJECT 0
+normalized gold reject rate: 0%
+listwise examples: 44（覆盖 19 个同时具有正负边界的查询）
+API request attempts: 135
+controller-successful requests: 134
+total tokens: 565,495
+```
+
+归一化规则只把“主题可能相关、但摘要未明确提及所需方法”的 REJECT 降为 BORDERLINE；明确任务或领域不符的论文仍保持 REJECT。最终审计报告位于 `search_data/outputs/mimo_teacher_v2_final.json`。

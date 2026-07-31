@@ -102,8 +102,8 @@ async def run(args: argparse.Namespace) -> None:
                 json.dumps({**stats, "llm_usage": client.usage_snapshot()}, ensure_ascii=False),
                 flush=True,
             )
-    if errors:
-        write_jsonl(args.output.with_suffix(".errors.jsonl"), errors)
+    # This file describes the current run only; clear stale failures after a successful retry.
+    write_jsonl(args.output.with_suffix(".errors.jsonl"), errors)
     summary = {**stats, "llm_usage": client.usage_snapshot()}
     args.output.with_suffix(".summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
