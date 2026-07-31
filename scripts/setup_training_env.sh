@@ -37,4 +37,17 @@ fi
 python -m pip install transformers datasets accelerate peft deepspeed pyarrow
 python -m pip install -e "$PROJECT_ROOT"
 
+# Login nodes provide Python development headers that may be absent on GPU nodes. Triton compiles
+# a tiny CUDA helper at the first training step, so keep a shared copy available to GCC.
+PYTHON_HEADER_ROOT="${PYTHON_HEADER_ROOT:-$DATA_ROOT/envs/python-headers}"
+PYTHON_INCLUDE_DIR="$(python -c 'import sysconfig; print(sysconfig.get_path("include"))')"
+mkdir -p "$PYTHON_HEADER_ROOT"
+if [[ -d "$PYTHON_INCLUDE_DIR" ]]; then
+  cp -a "$PYTHON_INCLUDE_DIR/." "$PYTHON_HEADER_ROOT/"
+fi
+MULTIARCH_INCLUDE="/usr/include/$(gcc -dumpmachine)/python$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+if [[ -d "$MULTIARCH_INCLUDE" ]]; then
+  cp -a "$MULTIARCH_INCLUDE/." "$PYTHON_HEADER_ROOT/"
+fi
+
 python -c 'import torch, transformers, datasets, accelerate, peft, deepspeed; print({"torch": torch.__version__, "transformers": transformers.__version__, "cuda": torch.cuda.is_available(), "gpu_count": torch.cuda.device_count()})'

@@ -91,3 +91,5 @@ sbatch --gres=gpu:4 \
 ```
 
 脚本默认先将 57 GB 基础模型缓存到计算节点本地 `/tmp`，避免每个分布式 rank 重复从共享盘读取整套权重；可用 `STAGE_MODEL_LOCAL=0` 关闭。LoRA 默认只注入 `q_proj/k_proj/v_proj/o_proj`，避免 PEFT 的 `all-linear` 错误包装 Qwen3-MoE 的三维专家参数。正式训练前先确认冒烟作业能够完成模型加载、首个反向传播和 adapter 保存。
+
+`setup_training_env.sh` 还会将登录节点的 Python 开发头文件复制到共享环境；GPU 节点首次运行 Triton CUDA helper 时通过 `C_INCLUDE_PATH` 使用它们，避免计算节点缺少 `Python.h`。
