@@ -17,6 +17,7 @@ ENV_ROOT="${ENV_ROOT:-$DATA_ROOT/envs/pnsearch}"
 MODEL_PATH="${MODEL_PATH:-/file_storage01/home/juanliu/25_ymj/model/Qwen3-Coder-30B-A3B-Instruct}"
 MAX_STEPS="${MAX_STEPS:--1}"
 OUTPUT_DIR="${OUTPUT_DIR:-$DATA_ROOT/models/pnsearch-reranker-lora}"
+NUM_GPUS="${NUM_GPUS:-${SLURM_GPUS_ON_NODE:-8}}"
 
 cd "$PROJECT_ROOT"
 source "$ENV_ROOT/bin/activate"
@@ -26,7 +27,7 @@ export OMP_NUM_THREADS=8
 export TRITON_CACHE_DIR="/tmp/pnsearch-triton-${SLURM_JOB_ID}"
 mkdir -p "$TRITON_CACHE_DIR"
 
-srun torchrun --standalone --nproc_per_node=8 scripts/train_sft.py \
+srun torchrun --standalone --nproc_per_node="$NUM_GPUS" scripts/train_sft.py \
   --task reranker \
   --model "$MODEL_PATH" \
   --train "$DATA_ROOT/processed/pasa/reranker_pointwise_train.jsonl" \
