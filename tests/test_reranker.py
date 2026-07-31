@@ -1,11 +1,37 @@
 import unittest
 
-from pnsearch.models.reranker import HeuristicListwiseReranker
+from pnsearch.models.reranker import HeuristicListwiseReranker, LLMListwiseReranker
 from pnsearch.schema import Criterion, DecisionLabel, Paper, QuerySpec
 from pnsearch.training.formatting import reranker_messages
 
 
 class RerankerTest(unittest.IsolatedAsyncioTestCase):
+    async def test_accepts_semantic_scores_from_mimo(self):
+        class FakeClient:
+            async def chat_json(self, **kwargs):
+                return {
+                    "results": [
+                        {
+                            "paper_id": "p1",
+                            "label": "SELECT",
+                            "relevance_score": "CLEAR",
+                            "evidence_sufficiency": "SUFFICIENT",
+                        }
+                    ]
+                }
+
+        judgments = await LLMListwiseReranker(FakeClient(), "mimo").rank(
+            QuerySpec(
+                original_query="query",
+                research_intent="query",
+                inclusion_criteria=[],
+                exclusion_criteria=[],
+            ),
+            [Paper(paper_id="p1", title="Paper", abstract="Abstract")],
+        )
+        self.assertEqual(judgments[0].relevance_score, 0.9)
+        self.assertEqual(judgments[0].evidence_sufficiency, 0.9)
+
     async def test_separates_relevant_and_irrelevant(self):
         spec = QuerySpec(
             original_query="LLM agent academic paper search",

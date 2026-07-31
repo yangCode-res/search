@@ -159,19 +159,53 @@ class LLMListwiseReranker(ListwiseReranker):
                 label = DecisionLabel(str(item.get("label", "BORDERLINE")).upper())
             except ValueError:
                 label = DecisionLabel.BORDERLINE
+            relevance_default = {
+                DecisionLabel.SELECT: 0.9,
+                DecisionLabel.BORDERLINE: 0.5,
+                DecisionLabel.REJECT: 0.1,
+            }[label]
             judgments.append(
                 PaperJudgment(
                     paper_id=paper_id,
                     label=label,
-                    relevance_score=max(0.0, min(1.0, float(item.get("relevance_score", 0.5)))),
+                    relevance_score=_bounded_score(
+                        item.get("relevance_score"), relevance_default
+                    ),
                     inclusion_judgments=item.get("inclusion_judgments") or {},
                     exclusion_judgments=item.get("exclusion_judgments") or {},
-                    evidence_sufficiency=max(0.0, min(1.0, float(item.get("evidence_sufficiency", 0.5)))),
+                    evidence_sufficiency=_bounded_score(
+                        item.get("evidence_sufficiency"), 0.5
+                    ),
                     reason_codes=item.get("reason_codes") or [],
                     rationale=item.get("rationale") or "",
                 )
             )
         return judgments
+
+
+def _bounded_score(value: object, default: float) -> float:
+    if isinstance(value, str):
+        semantic_scores = {
+            "CLEAR": 0.9,
+            "SUFFICIENT": 0.9,
+            "HIGH": 0.9,
+            "STRONG": 0.9,
+            "PARTIAL": 0.5,
+            "MEDIUM": 0.5,
+            "BORDERLINE": 0.5,
+            "UNCLEAR": 0.5,
+            "UNKNOWN": 0.5,
+            "INSUFFICIENT": 0.1,
+            "LOW": 0.1,
+            "NONE": 0.1,
+        }
+        normalized = value.strip().upper()
+        if normalized in semantic_scores:
+            return semantic_scores[normalized]
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return default
 
 
 def _hard_metadata_failure(spec: QuerySpec, paper: Paper) -> bool:
