@@ -80,7 +80,7 @@ class PasaOfflineIndex:
         self.close()
 
     def search(
-        self, query: str, limit: int = 30, *, strategy: str = "hybrid"
+        self, query: str, limit: int = 30, *, strategy: str = "broad"
     ) -> list[OfflineHit]:
         terms = fts_terms(query)
         if not terms:

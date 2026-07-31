@@ -16,7 +16,7 @@ def main() -> None:
     parser.add_argument("--index", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--results-per-query", type=int, default=80)
-    parser.add_argument("--strategy", choices=["broad", "tiered", "hybrid"], default="hybrid")
+    parser.add_argument("--strategy", choices=["broad", "tiered", "hybrid"], default="broad")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--inject-gold", action="store_true")
     args = parser.parse_args()

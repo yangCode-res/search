@@ -50,6 +50,7 @@ class HeuristicReasoner(SearchReasoner):
             normalized = " ".join(query.split())
             if not normalized or normalized.casefold() in seen:
                 continue
+            seen.add(normalized.casefold())
             source = self.sources[index % len(self.sources)]
             actions.append(
                 SearchAction(
@@ -91,6 +92,12 @@ class LLMReasoner(SearchReasoner):
         if data.get("stop"):
             return [SearchAction(type=ActionType.STOP, purpose="reasoner requested stop")]
         actions: list[SearchAction] = []
+        seen_queries = {
+            action.query.casefold().strip()
+            for record in state.history
+            for action in record.actions
+            if action.query.strip()
+        }
         for item in data.get("actions") or []:
             try:
                 action_type = ActionType(item.get("type", "KEYWORD_SEARCH"))
@@ -99,10 +106,15 @@ class LLMReasoner(SearchReasoner):
             source = item.get("source") or self.sources[0]
             if source not in self.sources:
                 source = self.sources[0]
+            query = str(item.get("query") or "").strip()
+            if query and query.casefold() in seen_queries:
+                continue
+            if query:
+                seen_queries.add(query.casefold())
             actions.append(
                 SearchAction(
                     type=action_type,
-                    query=item.get("query") or "",
+                    query=query,
                     source=source,
                     purpose=item.get("purpose") or "",
                     max_results=min(int(item.get("max_results") or 20), 100),
