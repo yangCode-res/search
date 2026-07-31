@@ -8,6 +8,11 @@ import os
 from pathlib import Path
 
 
+def log_stage(message: str) -> None:
+    if int(os.environ.get("LOCAL_RANK", "0")) == 0:
+        print(f"[pnsearch] {message}", flush=True)
+
+
 def resolve_deepspeed_config(
     path: str | Path, *, batch_size: int, gradient_accumulation: int, world_size: int
 ) -> dict:
@@ -65,6 +70,7 @@ def main() -> None:
     files = {"train": args.train}
     if args.validation:
         files["validation"] = args.validation
+    log_stage("loading training datasets")
     dataset = load_dataset("json", data_files=files)
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
     if tokenizer.pad_token_id is None:
@@ -101,6 +107,10 @@ def main() -> None:
         }
 
     tokenized = dataset.map(encode, remove_columns=dataset["train"].column_names)
+    log_stage(
+        f"encoded train={len(tokenized['train'])} validation="
+        f"{len(tokenized.get('validation', []))} max_length={args.max_length}"
+    )
     deepspeed_config = None
     resolved_deepspeed = args.deepspeed
     if args.deepspeed:
@@ -118,12 +128,15 @@ def main() -> None:
         deepspeed_config = HfDeepSpeedConfig(
             model_load_deepspeed_config(resolved_deepspeed)
         )
+        log_stage(f"initialized ZeRO-3 for world_size={world_size}")
+    log_stage(f"loading base model from {args.model}")
     model = AutoModelForCausalLM.from_pretrained(
         args.model,
         trust_remote_code=True,
         torch_dtype="auto",
         low_cpu_mem_usage=True,
     )
+    log_stage("base model loaded")
     model.config.use_cache = False
     model = get_peft_model(
         model,
@@ -135,6 +148,9 @@ def main() -> None:
             task_type="CAUSAL_LM",
         ),
     )
+    if int(os.environ.get("LOCAL_RANK", "0")) == 0:
+        model.print_trainable_parameters()
+    log_stage("LoRA adapters injected")
     training_args = TrainingArguments(
         output_dir=args.output,
         num_train_epochs=args.epochs,
@@ -167,9 +183,12 @@ def main() -> None:
             label_pad_token_id=-100,
         ),
     )
+    log_stage(f"starting training max_steps={args.max_steps} epochs={args.epochs}")
     trainer.train()
+    log_stage(f"saving adapter to {args.output}")
     trainer.save_model(args.output)
     tokenizer.save_pretrained(args.output)
+    log_stage("training and adapter save completed")
     _ = deepspeed_config
 
 
